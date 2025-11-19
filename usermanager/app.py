@@ -1,5 +1,6 @@
 from flask import Flask
-
+import user_pb2
+import user_pb2_grpc
 app = Flask(__name__)
 
 
