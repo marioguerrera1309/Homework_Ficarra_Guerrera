@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: guerrera
       POSTGRES_DB: user_db
     volumes:
-      - ./init_user_db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init_user_db.sql:/docker-entrypoint-initdb.d/init.sql #chiama il file per creare le tabelle
     ports:
       - "5433:5432" #porta per collegarsi al db
   data-db:
@@ -19,7 +19,7 @@ services:
       POSTGRES_PASSWORD: guerrera
       POSTGRES_DB: data_db
     volumes:
-      - ./init_data_db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init_data_db.sql:/docker-entrypoint-initdb.d/init.sql #chiama il file per creare le tabelle
     ports:
       - "5434:5432" #porta per collegarsi al db
   datacollector:
