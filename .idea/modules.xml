@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/Homework_Ficarra_Guerrera.iml" filepath="$PROJECT_DIR$/Homework_Ficarra_Guerrera.iml" />
+      <module fileurl="file://$PROJECT_DIR$/datacollector/datacollector.iml" filepath="$PROJECT_DIR$/datacollector/datacollector.iml" />
+      <module fileurl="file://$PROJECT_DIR$/usermanager/usermanager.iml" filepath="$PROJECT_DIR$/usermanager/usermanager.iml" />
+    </modules>
+  </component>
+</project>

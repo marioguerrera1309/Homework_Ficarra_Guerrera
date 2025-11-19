@@ -1,0 +1,43 @@
+version: "3.9"
+services:
+  user-db:
+    image: postgres:15-alpine
+    container_name: user_db_container
+    environment:
+      POSTGRES_USER: mario
+      POSTGRES_PASSWORD: guerrera
+      POSTGRES_DB: user_db
+    ports:
+      - "5433:5432" #porta per collegarsi al db
+  data-db:
+    image: postgres:15-alpine
+    container_name: data_db_container
+    environment:
+      POSTGRES_USER: mario
+      POSTGRES_PASSWORD: guerrera
+      POSTGRES_DB: data_db
+    #volumes:
+    #  - ./postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432" #porta per collegarsi al db
+  datacollector:
+    build: ./datacollector # Percorso dove hai il Dockerfile del codice
+    container_name: datacollectorcontainer
+    depends_on:
+      - data-db
+    environment:
+      DATABASE_URL: postgresql://mario:guerrera@data-db:5432/data_db
+      GRPC_USER_MANAGER_HOST: user-manager:50051
+    ports:
+      - "5001:5000" #porta per API rest
+  usermanager:
+    build: ./usermanager
+    container_name: usermanagercontainer
+    depends_on:
+      - user-db
+    ports:
+      - "5000:5000" #porta per API rest
+      - "50051:50051" #porta gRPC
+    environment:
+      DATABASE_URL: postgresql://mario:guerrera@user-db:5432/user_db
+      GRPC_PORT: 50051
