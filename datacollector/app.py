@@ -1,9 +1,13 @@
+import sys
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 import os
 import requests
 import json
 import calendar
+import service_pb2
+import service_pb2_grpc
+import grpc
 from datetime import datetime, timedelta
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
@@ -22,6 +26,17 @@ TOKEN_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protoc
 API_BASE_URL = "https://opensky-network.org/api"
 AIRPORT_ICAO = "OMDB"
 TOKEN=None
+SERVER_ADDRESS='usermanager:'+os.environ.get('GRPC_PORT')
+def UserVerification(email):
+    with grpc.insecure_channel(SERVER_ADDRESS) as channel:
+        stub=service_pb2_grpc.UserManagerServiceStub(channel)
+        print(f"Client: invio la richiesta con email: {email}", file=os.sys.stderr)
+        response=stub.ValidateEmail(service_pb2.UserVerification(email=email))
+        print(f"Client: Invio", file=os.sys.stderr)
+        validate=response.validate
+        print(f"Ricevuta risposta: {validate}", file=os.sys.stderr)
+        return validate
+
 def get_access_token():
     data = {
         "grant_type": "client_credentials",
@@ -101,6 +116,21 @@ def flights():
         print(f"ERRORE API/Rete: {e}", file=os.sys.stderr)
         error_msg = {"error": "OpenSky API Error", "message": str(e)}
         return jsonify(error_msg), 503
+@app.route('/function', methods=['POST'])
+def function():
+    data = request.get_json()
+    email=data.get("email")
+    #email="prova@prova.it"
+    airport=data.get("airport", [])
+    x=UserVerification(email)
+    #print(f"x: {x}", file=os.sys.stderr)
+    if x:
+        for index, a in enumerate(airport):
+            print(f"{index}: {a}", file=os.sys.stderr)
+        return jsonify({"message": f"Utente {email} verificato e {len(airport)} interessi elaborati."}), 200
+    else:
+        print(f"L'utente non esiste", file=os.sys.stderr)
+        return jsonify({"message": "L'utente non esiste"}), 200
 if __name__ == '__main__':
     TOKEN = get_access_token()
     app.run(host='0.0.0.0', port=5000, debug=True)

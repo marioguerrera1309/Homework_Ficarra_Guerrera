@@ -31,6 +31,7 @@ services:
       GRPC_USER_MANAGER_HOST: user-manager:50051
       USERNAME_API: ${username}
       PASSWORD_API: ${password}
+      GRPC_PORT: 50051
     ports:
       - "5001:5000" #porta per API rest
   usermanager:

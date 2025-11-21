@@ -1,0 +1,12 @@
+syntax = "proto3";
+//messaggio del DataCollector allo UserManager
+message UserVerification {
+  string email = 1;
+}
+//messaggio di risposta
+message Response {
+  bool validate = 1;
+}
+service UserManagerService {
+  rpc ValidateEmail (UserVerification) returns (Response);
+}

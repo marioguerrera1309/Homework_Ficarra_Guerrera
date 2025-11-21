@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from protos import user_pb2 as protos_dot_user__pb2
+import service_pb2 as service__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -18,14 +18,14 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in protos/user_pb2_grpc.py depends on'
+        + ' but the generated code in service_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
     )
 
 
-class UserManagerStub(object):
+class UserManagerServiceStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -34,43 +34,43 @@ class UserManagerStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.CheckUserExists = channel.unary_unary(
-                '/user.UserManager/CheckUserExists',
-                request_serializer=protos_dot_user__pb2.UserRequest.SerializeToString,
-                response_deserializer=protos_dot_user__pb2.UserResponse.FromString,
+        self.ValidateEmail = channel.unary_unary(
+                '/UserManagerService/ValidateEmail',
+                request_serializer=service__pb2.UserVerification.SerializeToString,
+                response_deserializer=service__pb2.Response.FromString,
                 _registered_method=True)
 
 
-class UserManagerServicer(object):
+class UserManagerServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def CheckUserExists(self, request, context):
+    def ValidateEmail(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
 
-def add_UserManagerServicer_to_server(servicer, server):
+def add_UserManagerServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'CheckUserExists': grpc.unary_unary_rpc_method_handler(
-                    servicer.CheckUserExists,
-                    request_deserializer=protos_dot_user__pb2.UserRequest.FromString,
-                    response_serializer=protos_dot_user__pb2.UserResponse.SerializeToString,
+            'ValidateEmail': grpc.unary_unary_rpc_method_handler(
+                    servicer.ValidateEmail,
+                    request_deserializer=service__pb2.UserVerification.FromString,
+                    response_serializer=service__pb2.Response.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'user.UserManager', rpc_method_handlers)
+            'UserManagerService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('user.UserManager', rpc_method_handlers)
+    server.add_registered_method_handlers('UserManagerService', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class UserManager(object):
+class UserManagerService(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def CheckUserExists(request,
+    def ValidateEmail(request,
             target,
             options=(),
             channel_credentials=None,
@@ -83,9 +83,9 @@ class UserManager(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/user.UserManager/CheckUserExists',
-            protos_dot_user__pb2.UserRequest.SerializeToString,
-            protos_dot_user__pb2.UserResponse.FromString,
+            '/UserManagerService/ValidateEmail',
+            service__pb2.UserVerification.SerializeToString,
+            service__pb2.Response.FromString,
             options,
             channel_credentials,
             insecure,
