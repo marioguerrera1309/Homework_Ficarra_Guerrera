@@ -1,7 +1,11 @@
 CREATE TABLE IF NOT EXISTS flights (
-    code VARCHAR(50) PRIMARY KEY,
-    airport_code VARCHAR(10) NOT NULL,
-    country VARCHAR(100) NOT NULL
+    icao24 VARCHAR(50) PRIMARY KEY,
+    callsign VARCHAR(50),
+    est_departure_airport VARCHAR(10), --aeroporto di partenza
+    est_arrival_airport VARCHAR(10),   --aeroporto di arrivo
+    first_seen_utc VARCHAR(30),
+    last_seen_utc VARCHAR(30),
+    ingestion_time DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS interests (
     email VARCHAR(255) NOT NULL,

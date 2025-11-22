@@ -14,14 +14,23 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 class Flight(db.Model):
-    _tablename_ = 'flights'
-    code = db.Column(db.String(50), primary_key=True)
-    airport_code = db.Column(db.String(10), nullable=False)
-    country = db.Column(db.String(100), nullable=False)
+    __tablename__ = 'flights'
+    icao24 = db.Column(db.String(50), primary_key=True) #idvolo
+    callsign = db.Column(db.String(50), nullable=True)
+    est_departure_airport = db.Column(db.String(10), nullable=True) #aereoportopartenza
+    est_arrival_airport = db.Column(db.String(10), nullable=True) #aereoportoarrivo
+    first_seen_utc = db.Column(db.String(30), nullable=True)
+    last_seen_utc = db.Column(db.String(30), nullable=True)
+    ingestion_time = db.Column(db.DateTime, default=datetime.utcnow)
 class Interest(db.Model):
-    _tablename_ = 'interests'
+    __tablename__ = 'interests'
     email = db.Column(db.String(255), primary_key=True)
     airport_code = db.Column(db.String(10), primary_key=True)
+class User(db.Model):
+    __tablename__ = 'users'
+    email = db.Column(db.String(255), primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    surname = db.Column(db.String(100), nullable=False)
 TOKEN_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
 API_BASE_URL = "https://opensky-network.org/api"
 AIRPORT_ICAO = "OMDB"
@@ -63,6 +72,33 @@ def get_access_token():
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({"message": "Data Collector is running"}), 200
+@app.route('/flights', methods=['POST'])
+def flights():
+    data = request.get_json()
+    email = data['email']
+    results = db.session.query(Interest.airport_code) \
+        .join(User) \
+        .filter(User.email == email) \
+        .all()
+    airport_codes = [code[0] for code in results]
+    NOW_UTC = datetime.utcnow()
+    BEGIN_DATETIME = NOW_UTC - timedelta(hours=24)
+    END_DATETIME = NOW_UTC
+    begin_ts = calendar.timegm(BEGIN_DATETIME.timetuple())
+    end_ts = calendar.timegm(END_DATETIME.timetuple())
+    auth_headers = {"Authorization": f"Bearer {TOKEN}"}
+    for code in airport_codes:
+        departures_url = f"{API_BASE_URL}/flights/departure?airport={code}&begin={begin_ts}&end={end_ts}"
+        print(f"Query in corso: {departures_url}", file=os.sys.stderr)
+        try:
+            response = requests.get(departures_url, headers=auth_headers)
+            response.raise_for_status()
+            flights = response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"ERRORE API/Rete: {e}", file=os.sys.stderr)
+            error_msg = {"error": "OpenSky API Error", "message": str(e)}
+            return jsonify(error_msg), 503
+'''
 @app.route('/flights', methods=['GET'])
 def flights():
     NOW_UTC = datetime.utcnow()
@@ -82,23 +118,23 @@ def flights():
             for f in flights:
                 volo_dati = {
                     "icao24": f.get("icao24"),
-                    "nominativo": f.get("callsign", "").strip() or None,
-                    "primo_avvistamento_ts": f.get("firstSeen"),
-                    "ultimo_avvistamento_ts": f.get("lastSeen"),
-                    "aeroporto_partenza_stimato": f.get("estDepartureAirport"),
-                    "aeroporto_arrivo_stimato": f.get("estArrivalAirport"),
-                    "primo_avvistamento_utc": datetime.fromtimestamp(f.get("firstSeen")).strftime('%Y-%m-%d %H:%M:%S') if f.get("firstSeen") else None,
-                    "ultimo_avvistamento_utc": datetime.fromtimestamp(f.get("lastSeen")).strftime('%Y-%m-%d %H:%M:%S') if f.get("lastSeen") else None,
+                    "callsign": f.get("callsign", "").strip() or None,
+                    "firstSeen_timestamp": f.get("firstSeen"),
+                    "lastSeen_timestamp": f.get("lastSeen"),
+                    "estDepartureAirport": f.get("estDepartureAirport"),
+                    "estArrivalAirport": f.get("estArrivalAirport"),
+                    "firstSeen_utc": datetime.fromtimestamp(f.get("firstSeen")).strftime('%Y-%m-%d %H:%M:%S') if f.get("firstSeen") else None,
+                    "lastSeen_utc": datetime.fromtimestamp(f.get("lastSeen")).strftime('%Y-%m-%d %H:%M:%S') if f.get("lastSeen") else None,
                 }
                 voli_json_list.append(volo_dati)
             output_data = {
-                "informazioni_query": {
-                    "aeroporto_icao": AIRPORT_ICAO,
-                    "inizio_ts": begin_ts,
-                    "fine_ts": end_ts,
-                    "numero_risultati": len(voli_json_list)
+                "query_info": {
+                    "airport_icao": airport_icao,
+                    "start_time_ts": begin_ts,
+                    "end_time_ts": end_ts,
+                    "count": len(voli_json_list)
                 },
-                "voli": voli_json_list
+                "flights": voli_json_list
             }
             return jsonify(output_data), 200
         else:
@@ -116,8 +152,9 @@ def flights():
         print(f"ERRORE API/Rete: {e}", file=os.sys.stderr)
         error_msg = {"error": "OpenSky API Error", "message": str(e)}
         return jsonify(error_msg), 503
-@app.route('/function', methods=['POST'])
-def function():
+'''
+@app.route('/add_interest', methods=['POST'])
+def add_interest():
     data = request.get_json()
     email=data.get("email")
     #email="prova@prova.it"
@@ -126,8 +163,23 @@ def function():
     #print(f"x: {x}", file=os.sys.stderr)
     if x:
         for index, a in enumerate(airport):
-            print(f"{index}: {a}", file=os.sys.stderr)
-        return jsonify({"message": f"Utente {email} verificato e {len(airport)} interessi elaborati."}), 200
+            y=Interest(email=email, airport_code=a)
+            db.session.add(y)
+            db.session.commit()
+            print(f"{index}: {a} : interesse inserito in db", file=os.sys.stderr)
+        return jsonify({"message": f"Utente {email} verificato e {len(airport)} interessi aggiunti."}), 200
+    else:
+        print(f"L'utente non esiste", file=os.sys.stderr)
+        return jsonify({"message": "L'utente non esiste"}), 200
+@app.route('/interest', methods=['POST'])
+def interest():
+    data = request.get_json()
+    email=data.get("email")
+    x=UserVerification(email)
+    if x:
+        int= db.session.scalars(db.select(Interest).where(Interest.email == email)).all()
+        int_list = [{"email": i.email, "airport_code": i.airport_code} for i in int]
+        return jsonify({"Interest": int_list}), 200
     else:
         print(f"L'utente non esiste", file=os.sys.stderr)
         return jsonify({"message": "L'utente non esiste"}), 200
