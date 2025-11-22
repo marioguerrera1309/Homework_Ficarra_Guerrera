@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS flights (
     est_arrival_airport VARCHAR(10),   --aeroporto di arrivo
     first_seen_utc VARCHAR(30),
     last_seen_utc VARCHAR(30),
-    ingestion_time DATETIME DEFAULT CURRENT_TIMESTAMP
+    ingestion_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS interests (
     email VARCHAR(255) NOT NULL,

@@ -8,11 +8,17 @@ import calendar
 import service_pb2
 import service_pb2_grpc
 import grpc
+import time
+import schedule
+import threading
 from datetime import datetime, timedelta
+from sqlalchemy import select, func, cast, BigInteger
+from sqlalchemy.sql.expression import text
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+API_BASE_URL = "https://opensky-network.org/api"
 class Flight(db.Model):
     __tablename__ = 'flights'
     icao24 = db.Column(db.String(50), primary_key=True) #idvolo
@@ -33,7 +39,7 @@ class User(db.Model):
     surname = db.Column(db.String(100), nullable=False)
 TOKEN_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
 API_BASE_URL = "https://opensky-network.org/api"
-AIRPORT_ICAO = "OMDB"
+#AIRPORT_ICAO = "OMDB"
 TOKEN=None
 SERVER_ADDRESS='usermanager:'+os.environ.get('GRPC_PORT')
 def UserVerification(email):
@@ -75,84 +81,19 @@ def home():
 @app.route('/flights', methods=['POST'])
 def flights():
     data = request.get_json()
-    email = data['email']
-    results = db.session.query(Interest.airport_code) \
-        .join(User) \
-        .filter(User.email == email) \
-        .all()
-    airport_codes = [code[0] for code in results]
-    NOW_UTC = datetime.utcnow()
-    BEGIN_DATETIME = NOW_UTC - timedelta(hours=24)
-    END_DATETIME = NOW_UTC
-    begin_ts = calendar.timegm(BEGIN_DATETIME.timetuple())
-    end_ts = calendar.timegm(END_DATETIME.timetuple())
-    auth_headers = {"Authorization": f"Bearer {TOKEN}"}
-    for code in airport_codes:
-        departures_url = f"{API_BASE_URL}/flights/departure?airport={code}&begin={begin_ts}&end={end_ts}"
-        print(f"Query in corso: {departures_url}", file=os.sys.stderr)
-        try:
-            response = requests.get(departures_url, headers=auth_headers)
-            response.raise_for_status()
-            flights = response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"ERRORE API/Rete: {e}", file=os.sys.stderr)
-            error_msg = {"error": "OpenSky API Error", "message": str(e)}
-            return jsonify(error_msg), 503
-'''
-@app.route('/flights', methods=['GET'])
-def flights():
-    NOW_UTC = datetime.utcnow()
-    BEGIN_DATETIME = NOW_UTC - timedelta(hours=24)
-    END_DATETIME = NOW_UTC
-    begin_ts = calendar.timegm(BEGIN_DATETIME.timetuple())
-    end_ts = calendar.timegm(END_DATETIME.timetuple())
-    auth_headers = {"Authorization": f"Bearer {TOKEN}"}
-    departures_url = f"{API_BASE_URL}/flights/departure?airport={AIRPORT_ICAO}&begin={begin_ts}&end={end_ts}"
-    print(f"Query in corso: {departures_url}", file=os.sys.stderr)
-    try:
-        response = requests.get(departures_url, headers=auth_headers)
-        response.raise_for_status()
-        flights = response.json()
-        voli_json_list = []
-        if flights:
-            for f in flights:
-                volo_dati = {
-                    "icao24": f.get("icao24"),
-                    "callsign": f.get("callsign", "").strip() or None,
-                    "firstSeen_timestamp": f.get("firstSeen"),
-                    "lastSeen_timestamp": f.get("lastSeen"),
-                    "estDepartureAirport": f.get("estDepartureAirport"),
-                    "estArrivalAirport": f.get("estArrivalAirport"),
-                    "firstSeen_utc": datetime.fromtimestamp(f.get("firstSeen")).strftime('%Y-%m-%d %H:%M:%S') if f.get("firstSeen") else None,
-                    "lastSeen_utc": datetime.fromtimestamp(f.get("lastSeen")).strftime('%Y-%m-%d %H:%M:%S') if f.get("lastSeen") else None,
-                }
-                voli_json_list.append(volo_dati)
-            output_data = {
-                "query_info": {
-                    "airport_icao": airport_icao,
-                    "start_time_ts": begin_ts,
-                    "end_time_ts": end_ts,
-                    "count": len(voli_json_list)
-                },
-                "flights": voli_json_list
-            }
-            return jsonify(output_data), 200
-        else:
-            message = f"Nessun volo trovato da {begin_ts} a {end_ts} (UTC)."
-            print(message, file=os.sys.stderr)
-            return jsonify({
-                "informazioni_query": {
-                    "aeroporto_icao": AIRPORT_ICAO,
-                    "numero_risultati": 0,
-                    "messaggio": message
-                },
-                "voli": []
-            }), 200
-    except requests.exceptions.RequestException as e:
-        print(f"ERRORE API/Rete: {e}", file=os.sys.stderr)
-        error_msg = {"error": "OpenSky API Error", "message": str(e)}
-        return jsonify(error_msg), 503
-'''
+    email=data.get("email")
+    x=UserVerification(email)
+    if x:
+        int = db.session.scalars(
+            select(Flight)
+            .join(Interest, Flight.est_departure_airport == Interest.airport_code)
+            .where(Interest.email == email)
+        ).all()
+        int_list = [{"icao24": i.icao24, "callsign": i.callsign, "est_departure_airport": i.est_departure_airport, "est_arrival_airport": i.est_arrival_airport, "first_seen_utc": i.first_seen_utc, "last_seen_utc": i.last_seen_utc, "ingestion_time": i.ingestion_time} for i in int]
+        return jsonify({"Flights": int_list}), 200
+    else:
+        print(f"L'utente non esiste", file=os.sys.stderr)
+        return jsonify({"message": "L'utente non esiste"}), 200
 @app.route('/add_interest', methods=['POST'])
 def add_interest():
     data = request.get_json()
@@ -183,6 +124,127 @@ def interest():
     else:
         print(f"L'utente non esiste", file=os.sys.stderr)
         return jsonify({"message": "L'utente non esiste"}), 200
+@app.route("/last_flight/<airport_code>", methods=["GET"])
+def get_last_flight(airport_code):
+    with app.app_context():
+        try:
+            last_flight = Flight.query.filter_by(est_departure_airport=airport_code) \
+                .order_by(Flight.first_seen_utc.desc()) \
+                .first()
+            if not last_flight:
+                return jsonify({"message": f"Nessun dato di volo trovato per l'aeroporto {airport_code}."}), 404
+            last_flight_a = Flight.query.filter_by(est_arrival_airport=airport_code) \
+                .order_by(Flight.first_seen_utc.desc()) \
+                .first()
+            if not last_flight_a:
+                return jsonify({"message": f"Nessun dato di volo trovato per l'aeroporto {airport_code}."}), 404
+            flight_data = {
+                "icao24_departure": last_flight.icao24,
+                "callsign_departure": last_flight.callsign,
+                "est_departure_airport_departure": last_flight.est_departure_airport,
+                "est_arrival_airport_departure": last_flight.est_arrival_airport,
+                "first_seen_utc_departure": last_flight.first_seen_utc,
+                "last_seen_utc_departure": last_flight.last_seen_utc,
+                "icao24_arrival": last_flight_a.icao24,
+                "callsign_arrival": last_flight_a.callsign,
+                "est_departure_airport_arrival": last_flight_a.est_departure_airport,
+                "est_arrival_airport_arrival": last_flight_a.est_arrival_airport,
+                "first_seen_utc_arrival": last_flight_a.first_seen_utc,
+                "last_seen_utc_arrival": last_flight_a.last_seen_utc,
+            }
+            return jsonify(flight_data), 200
+        except Exception as e:
+            app.logger.error(f"Errore nel recupero dell'ultimo volo: {e}")
+            return jsonify({"error": "Errore interno durante la query"}), 500
+@app.route("/average_flights/<airport_code>", methods=["GET"])
+def calculate_average_flights(airport_code):
+    days = request.args.get('days', 30, type=int) #default=7
+    if days <= 0:
+        return jsonify({"error": "Il numero di giorni (X) deve essere maggiore di zero."}), 400
+    NOW_UTC = datetime.utcnow()
+    BEGIN_DATETIME = NOW_UTC - timedelta(days=days)
+    END_DATETIME = NOW_UTC
+    with app.app_context():
+        try:
+            total_flights = db.session.query(func.count(Flight.est_departure_airport)) \
+                .filter(Flight.est_departure_airport == airport_code) \
+                .filter(Flight.first_seen_utc.cast(db.DateTime) >= BEGIN_DATETIME) \
+                .filter(Flight.last_seen_utc.cast(db.DateTime) <= END_DATETIME) \
+                .scalar()
+            total_flights = total_flights if total_flights is not None else 0
+            average = total_flights / days if days > 0 else 0
+            return jsonify({
+                "aeroporto_icao": airport_code,
+                "periodo_giorni": days,
+                "voli_totali": total_flights,
+                "media_giornaliera": round(average, 2)
+            }), 200
+        except Exception as e:
+            app.logger.error(f"Errore nel calcolo della media: {e}")
+            return jsonify({"error": "Errore interno durante il calcolo della media"}), 500
+def data_collection_job():
+    with app.app_context():
+        NOW_UTC = datetime.utcnow()
+        BEGIN_DATETIME = NOW_UTC - timedelta(hours=24)
+        END_DATETIME = NOW_UTC
+        begin_ts = calendar.timegm(BEGIN_DATETIME.timetuple())
+        end_ts = calendar.timegm(END_DATETIME.timetuple())
+        interests = db.session.query(Interest.airport_code).distinct().all()
+        for (airport_icao,) in interests:
+            print(f"Raccolta dati per l'aeroporto: {airport_icao}", file=os.sys.stderr)
+            try:
+                auth_headers = {"Authorization": f"Bearer {TOKEN}"}
+                departures_url = f"{API_BASE_URL}/flights/departure?airport={airport_icao}&begin={begin_ts}&end={end_ts}"
+                response = requests.get(departures_url, headers=auth_headers)
+                response.raise_for_status()
+                flights_data = response.json()
+                for f in flights_data:
+                    first_seen_utc_str = datetime.fromtimestamp(f.get("firstSeen")).strftime('%Y-%m-%d %H:%M:%S') if f.get("firstSeen") else None
+                    last_seen_utc_str = datetime.fromtimestamp(f.get("lastSeen")).strftime('%Y-%m-%d %H:%M:%S') if f.get("lastSeen") else None
+                    new_flight = Flight(
+                        icao24=f.get("icao24"),
+                        callsign=f.get("callsign", "").strip() or None,
+                        est_departure_airport=f.get("estDepartureAirport"),
+                        est_arrival_airport=f.get("estArrivalAirport"),
+                        first_seen_utc=first_seen_utc_str,
+                        last_seen_utc=last_seen_utc_str,
+                    )
+                    db.session.merge(new_flight)
+                db.session.commit()
+                print(f"Salvati {len(flights_data)} voli in partenza per {airport_icao}.", file=os.sys.stderr)
+                auth_headers = {"Authorization": f"Bearer {TOKEN}"}
+                arrival_url = f"{API_BASE_URL}/flights/arrival?airport={airport_icao}&begin={begin_ts}&end={end_ts}"
+                response = requests.get(arrival_url, headers=auth_headers)
+                response.raise_for_status()
+                flights_data = response.json()
+                for f in flights_data:
+                    first_seen_utc_str = datetime.fromtimestamp(f.get("firstSeen")).strftime('%Y-%m-%d %H:%M:%S') if f.get("firstSeen") else None
+                    last_seen_utc_str = datetime.fromtimestamp(f.get("lastSeen")).strftime('%Y-%m-%d %H:%M:%S') if f.get("lastSeen") else None
+                    new_flight = Flight(
+                        icao24=f.get("icao24"),
+                        callsign=f.get("callsign", "").strip() or None,
+                        est_departure_airport=f.get("estDepartureAirport"),
+                        est_arrival_airport=f.get("estArrivalAirport"),
+                        first_seen_utc=first_seen_utc_str,
+                        last_seen_utc=last_seen_utc_str,
+                    )
+                    db.session.merge(new_flight)
+                db.session.commit()
+                print(f"Salvati {len(flights_data)} voli in arrivo per {airport_icao}.", file=os.sys.stderr)
+            except Exception as e:
+                print(f"Errore durante la raccolta dati per {airport_icao}: {e}", file=os.sys.stderr)
+                db.session.rollback()
+def run_scheduler():
+    schedule.every(12).hours.do(data_collection_job)
+    data_collection_job()
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 if __name__ == '__main__':
     TOKEN = get_access_token()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    if TOKEN:
+        scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+        scheduler_thread.start()
+        app.run(host='0.0.0.0', port=5000, debug=True)
+    else:
+        print("Errore critico: Impossibile ottenere il token OpenSky. Uscita.", file=os.sys.stderr)
