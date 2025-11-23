@@ -182,6 +182,114 @@ def calculate_average_flights(airport_code):
         except Exception as e:
             app.logger.error(f"Errore nel calcolo della media: {e}")
             return jsonify({"error": "Errore interno durante il calcolo della media"}), 500
+
+@app.route('/flights_by_period', methods=['GET'])
+def get_flights_by_period():
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+
+    if not start_date_str or not end_date_str:
+        return jsonify({"error": "I parametri 'start_date' (YYYY-MM-DD) e 'end_date' sono obbligatori."}), 400
+
+    try:
+        start_dt = datetime.strptime(start_date_str, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date_str, '%Y-%m-%d') + timedelta(days=1)
+    except ValueError:
+        return jsonify({"error": "Formato data non valido. Usa YYYY-MM-DD."}), 400
+
+    with app.app_context():
+        try:
+
+            results = db.session.execute(
+                select(
+                    Flight.est_departure_airport.label('airport'),
+                    func.count(Flight.icao24).label('total_flights')
+                )
+                .filter(Flight.est_departure_airport.isnot(None))
+                .filter(Flight.first_seen_utc.cast(db.DateTime) >= start_dt)
+                .filter(Flight.first_seen_utc.cast(db.DateTime) < end_dt)
+                .group_by(Flight.est_departure_airport)
+            ).all()
+
+            if not results:
+                return jsonify({"message": "Nessun volo trovato nell'intervallo specificato."}), 200
+
+            output_list = [
+                {"aeroporto": r.airport, "voli_totali": r.total_flights}
+                for r in results
+            ]
+
+            return jsonify({
+                "periodo_richiesto": f"Da {start_date_str} a {end_date_str}",
+                "voli_per_aeroporto": output_list
+            }), 200
+
+        except Exception as e:
+            app.logger.error(f"Errore query DB: {e}")
+            return jsonify({"error": "Errore interno durante l'aggregazione"}), 500
+
+
+@app.route('/flight_duration/<airport_code>', methods=['GET'])
+def get_flight_duration(airport_code):
+    with app.app_context():
+
+        flights = db.session.scalars(
+            select(Flight)
+            .filter(
+                (Flight.est_departure_airport == airport_code) |
+                (Flight.est_arrival_airport == airport_code)
+            )
+        ).all()
+
+        if not flights:
+            return jsonify({"message": f"Nessun volo trovato da/per {airport_code}."}), 404
+
+        min_duration = timedelta(days=9999)
+        max_duration = timedelta(seconds=0)
+        longest_flight = None
+        shortest_flight = None
+
+
+        for flight in flights:
+            try:
+
+                start = datetime.strptime(flight.first_seen_utc, '%Y-%m-%d %H:%M:%S')
+                end = datetime.strptime(flight.last_seen_utc, '%Y-%m-%d %H:%M:%S')
+
+                duration = end - start
+
+                if duration > max_duration:
+                    max_duration = duration
+                    longest_flight = flight
+
+                if duration < min_duration and duration.total_seconds() > 0:
+                    min_duration = duration
+                    shortest_flight = flight
+
+            except (ValueError, TypeError):
+
+                continue
+
+        if not longest_flight:
+            return jsonify({"message": f"Dati temporali non sufficienti per calcolare la durata dei voli in {airport_code}."}), 404
+
+        return jsonify({
+            "aeroporto_analizzato": airport_code,
+            "volo_piu_lungo": {
+                "icao24": longest_flight.icao24,
+                "callsign": longest_flight.callsign,
+                "durata_secondi": int(max_duration.total_seconds()),
+                "durata_formattata": str(max_duration)
+            },
+            "volo_piu_breve": {
+                "icao24": shortest_flight.icao24,
+                "callsign": shortest_flight.callsign,
+                "durata_secondi": int(min_duration.total_seconds()),
+                "durata_formattata": str(min_duration)
+            }
+        }), 200
+
+
 def data_collection_job():
     with app.app_context():
         NOW_UTC = datetime.utcnow()
