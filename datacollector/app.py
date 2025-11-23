@@ -183,7 +183,7 @@ def calculate_average_flights(airport_code):
             app.logger.error(f"Errore nel calcolo della media: {e}")
             return jsonify({"error": "Errore interno durante il calcolo della media"}), 500
 
-        @app.route('/flights_by_period', methods=['GET'])
+@app.route('/flights_by_period', methods=['GET'])
 def get_flights_by_period():
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
