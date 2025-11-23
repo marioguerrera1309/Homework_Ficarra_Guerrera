@@ -289,7 +289,6 @@ def get_flight_duration(airport_code):
             }
         }), 200
 
-
 def data_collection_job():
     with app.app_context():
         NOW_UTC = datetime.utcnow()
