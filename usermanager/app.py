@@ -10,6 +10,8 @@ from sqlalchemy import select
 from datetime import datetime, timedelta
 import schedule
 import time
+import json
+from sqlalchemy.exc import IntegrityError
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -21,6 +23,12 @@ class User(db.Model):
     surname = db.Column(db.String(100), nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
+class IdempotencyKey(db.Model):
+    __tablename__ = 'idempotency_keys'
+    key = db.Column(db.String(255), primary_key=True)
+    status_code = db.Column(db.Integer, nullable=True)
+    response_body = db.Column(db.Text, nullable=True)
+    completion_time = db.Column(db.DateTime, default=datetime.utcnow)
 class UserManagerService(service_pb2_grpc.UserManagerServiceServicer):
     def CheckUserStatus(self, request, context):
         email=request.email
@@ -62,10 +70,58 @@ def users():
     return jsonify({"users": users_list}), 200
 @app.route('/add_user', methods=['POST'])
 def add_user():
-    user=User(email=request.form['email'], name=request.form['name'], surname=request.form['surname'])
-    db.session.add(user)
-    db.session.commit()
-    return jsonify({"message": "User added successfully"}), 200
+    idempotency_key = request.headers.get('X-Idempotency-Key')
+
+    if not idempotency_key:
+        return jsonify({"error": "Missing X-Idempotency-Key header: Required for at-most-once policy."}), 400
+
+    existing_key = IdempotencyKey.query.filter_by(key=idempotency_key).first()
+
+    if existing_key:
+        print(f"Richiesta duplicata intercettata con chiave: {idempotency_key}. Restituzione risposta cache.")
+
+        return jsonify({"message": "User registration already processed (At-Most-Once policy enforced)"}), 200
+
+
+    email = request.form.get('email')
+    name = request.form.get('name')
+    surname = request.form.get('surname')
+
+    success_message = {"message": "User added successfully"}
+    success_status = 201
+
+    try:
+
+        new_user = User(email=email, name=name, surname=surname)
+        db.session.add(new_user)
+
+
+        new_key = IdempotencyKey(
+            key=idempotency_key,
+            status_code=success_status,
+            response_body=json.dumps(success_message)
+        )
+        db.session.add(new_key)
+
+
+        db.session.commit()
+
+
+        return jsonify(success_message), success_status
+
+    except IntegrityError:
+
+        db.session.rollback()
+        error_response = {"error": "User with this email already exists."}
+        error_status = 409
+
+
+        return jsonify(error_response), error_status
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Errore durante l'aggiunta utente: {e}")
+        return jsonify({"error": "Internal server error."}), 500
 @app.route('/delete_user', methods=['POST'])
 def delete_user():
     user = User.query.filter_by(email=request.form['email']).first()
