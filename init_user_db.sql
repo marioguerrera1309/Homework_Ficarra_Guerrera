@@ -11,4 +11,4 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
     status_code INTEGER,
     response_body TEXT,
     completion_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+);

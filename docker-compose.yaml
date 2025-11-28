@@ -43,6 +43,7 @@ services:
       USERNAME_API: ${username}
       PASSWORD_API: ${password}
       GRPC_PORT: 50051
+      PERIODO: 20
     ports:
       - "5001:5000" #porta per API rest
   usermanager:
@@ -57,3 +58,4 @@ services:
     environment:
       DATABASE_URL: postgresql://mario:guerrera@user-db:5432/user_db
       GRPC_PORT: 50051
+      PERIODO: 20

@@ -41,7 +41,6 @@ class User(db.Model):
     deleted_at = db.Column(db.DateTime, nullable=True)
 TOKEN_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
 API_BASE_URL = "https://opensky-network.org/api"
-#AIRPORT_ICAO = "OMDB"
 TOKEN=None
 SERVER_ADDRESS='usermanager:'+os.environ.get('GRPC_PORT')
 def CheckUserStatus(email):
@@ -49,7 +48,6 @@ def CheckUserStatus(email):
         stub=service_pb2_grpc.UserManagerServiceStub(channel)
         print(f"Client: invio la richiesta con email: {email}", file=os.sys.stderr)
         response=stub.CheckUserStatus(service_pb2.UserVerification(email=email))
-        #print(f"Client: Invio", file=os.sys.stderr)
         status=response.status
         print(f"Ricevuta risposta: {status}", file=os.sys.stderr)
         return status
@@ -83,49 +81,57 @@ def home():
 def flights():
     data = request.get_json()
     email=data.get("email")
-    x=CheckUserStatus(email)
-    if x == service_pb2.UserStatus.ACTIVE:
-        int = db.session.scalars(
-            select(Flight)
-            .join(Interest, Flight.est_departure_airport == Interest.airport_code)
-            .where(Interest.email == email)
-        ).all()
-        int_list = [{"icao24": i.icao24, "callsign": i.callsign, "est_departure_airport": i.est_departure_airport, "est_arrival_airport": i.est_arrival_airport, "first_seen_utc": i.first_seen_utc, "last_seen_utc": i.last_seen_utc, "ingestion_time": i.ingestion_time} for i in int]
-        return jsonify({"Flights": int_list}), 200
+    if email is None:
+        return jsonify({"message": "Paramentro email mancante"}), 200
     else:
-        print(f"L'utente non esiste", file=os.sys.stderr)
-        return jsonify({"message": "L'utente non esiste"}), 200
+        x=CheckUserStatus(email)
+        if x == service_pb2.UserStatus.ACTIVE:
+            int = db.session.scalars(
+                select(Flight)
+                .join(Interest, Flight.est_departure_airport == Interest.airport_code)
+                .where(Interest.email == email)
+            ).all()
+            int_list = [{"icao24": i.icao24, "callsign": i.callsign, "est_departure_airport": i.est_departure_airport, "est_arrival_airport": i.est_arrival_airport, "first_seen_utc": i.first_seen_utc, "last_seen_utc": i.last_seen_utc, "ingestion_time": i.ingestion_time} for i in int]
+            return jsonify({"Flights": int_list}), 200
+        else:
+            print(f"L'utente non esiste", file=os.sys.stderr)
+            return jsonify({"message": "L'utente non esiste"}), 200
 @app.route('/add_interest', methods=['POST'])
 def add_interest():
     data = request.get_json()
     email=data.get("email")
-    #email="prova@prova.it"
     airport=data.get("airport", [])
-    x=CheckUserStatus(email)
-    if x == service_pb2.UserStatus.ACTIVE:
-    #print(f"x: {x}", file=os.sys.stderr)
-        for index, a in enumerate(airport):
-            y=Interest(email=email, airport_code=a)
-            db.session.add(y)
-            db.session.commit()
-            data_collection_job() #chiama il data collector dei voli
-            print(f"{index}: {a} : interesse inserito in db", file=os.sys.stderr)
-        return jsonify({"message": f"Utente {email} verificato e {len(airport)} interessi aggiunti."}), 200
+    if email is None or airport is None:
+        return jsonify({"message": "Paramentri email, aereporti mancanti"}), 200
     else:
-        print(f"L'utente non esiste", file=os.sys.stderr)
-        return jsonify({"message": "L'utente non esiste"}), 200
+        x=CheckUserStatus(email)
+        if x == service_pb2.UserStatus.ACTIVE:
+        #print(f"x: {x}", file=os.sys.stderr)
+            for index, a in enumerate(airport):
+                y=Interest(email=email, airport_code=a)
+                db.session.add(y)
+                db.session.commit()
+                data_collection_job() #chiama il data collector dei voli
+                print(f"{index}: {a} : interesse inserito in db", file=os.sys.stderr)
+            return jsonify({"message": f"Utente {email} verificato e {len(airport)} interessi aggiunti."}), 200
+        else:
+            print(f"L'utente non esiste", file=os.sys.stderr)
+            return jsonify({"message": "L'utente non esiste"}), 200
 @app.route('/interest', methods=['POST'])
 def interest():
     data = request.get_json()
     email=data.get("email")
-    x=CheckUserStatus(email)
-    if x == service_pb2.UserStatus.ACTIVE:
-        int= db.session.scalars(db.select(Interest).where(Interest.email == email)).all()
-        int_list = [{"email": i.email, "airport_code": i.airport_code} for i in int]
-        return jsonify({"Interest": int_list}), 200
+    if email is None:
+        return jsonify({"message": "Paramentro email mancante"}), 200
     else:
-        print(f"L'utente non esiste o è stato eliminato", file=os.sys.stderr)
-        return jsonify({"message": "L'utente non esiste o è stato eliminato"}), 200
+        x=CheckUserStatus(email)
+        if x == service_pb2.UserStatus.ACTIVE:
+            int= db.session.scalars(db.select(Interest).where(Interest.email == email)).all()
+            int_list = [{"email": i.email, "airport_code": i.airport_code} for i in int]
+            return jsonify({"Interest": int_list}), 200
+        else:
+            print(f"L'utente non esiste o è stato eliminato", file=os.sys.stderr)
+            return jsonify({"message": "L'utente non esiste o è stato eliminato"}), 200
 @app.route("/last_flight/<airport_code>", methods=["GET"])
 def get_last_flight(airport_code):
     with app.app_context():
@@ -334,7 +340,7 @@ def data_collection_job():
                 print(f"Errore durante la raccolta dati per {airport_icao}: {e}", file=os.sys.stderr)
                 db.session.rollback()
 def run_scheduler():
-    schedule.every(20).seconds.do(data_collection_job)
+    schedule.every(int(os.environ.get('PERIODO'))).seconds.do(data_collection_job)
     data_collection_job()
     while True:
         schedule.run_pending()
