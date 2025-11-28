@@ -34,8 +34,8 @@ class UserManagerServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.ValidateEmail = channel.unary_unary(
-                '/UserManagerService/ValidateEmail',
+        self.CheckUserStatus = channel.unary_unary(
+                '/UserManagerService/CheckUserStatus',
                 request_serializer=service__pb2.UserVerification.SerializeToString,
                 response_deserializer=service__pb2.Response.FromString,
                 _registered_method=True)
@@ -44,8 +44,9 @@ class UserManagerServiceStub(object):
 class UserManagerServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def ValidateEmail(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+    def CheckUserStatus(self, request, context):
+        """Verifica stato utente
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -53,8 +54,8 @@ class UserManagerServiceServicer(object):
 
 def add_UserManagerServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'ValidateEmail': grpc.unary_unary_rpc_method_handler(
-                    servicer.ValidateEmail,
+            'CheckUserStatus': grpc.unary_unary_rpc_method_handler(
+                    servicer.CheckUserStatus,
                     request_deserializer=service__pb2.UserVerification.FromString,
                     response_serializer=service__pb2.Response.SerializeToString,
             ),
@@ -70,7 +71,7 @@ class UserManagerService(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def ValidateEmail(request,
+    def CheckUserStatus(request,
             target,
             options=(),
             channel_credentials=None,
@@ -83,7 +84,7 @@ class UserManagerService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/UserManagerService/ValidateEmail',
+            '/UserManagerService/CheckUserStatus',
             service__pb2.UserVerification.SerializeToString,
             service__pb2.Response.FromString,
             options,

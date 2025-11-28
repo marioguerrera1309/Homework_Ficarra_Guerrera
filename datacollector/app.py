@@ -37,21 +37,22 @@ class User(db.Model):
     email = db.Column(db.String(255), primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     surname = db.Column(db.String(100), nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    deleted_at = db.Column(db.DateTime, nullable=True)
 TOKEN_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
 API_BASE_URL = "https://opensky-network.org/api"
 #AIRPORT_ICAO = "OMDB"
 TOKEN=None
 SERVER_ADDRESS='usermanager:'+os.environ.get('GRPC_PORT')
-def UserVerification(email):
+def CheckUserStatus(email):
     with grpc.insecure_channel(SERVER_ADDRESS) as channel:
         stub=service_pb2_grpc.UserManagerServiceStub(channel)
         print(f"Client: invio la richiesta con email: {email}", file=os.sys.stderr)
-        response=stub.ValidateEmail(service_pb2.UserVerification(email=email))
-        print(f"Client: Invio", file=os.sys.stderr)
-        validate=response.validate
-        print(f"Ricevuta risposta: {validate}", file=os.sys.stderr)
-        return validate
-
+        response=stub.CheckUserStatus(service_pb2.UserVerification(email=email))
+        #print(f"Client: Invio", file=os.sys.stderr)
+        status=response.status
+        print(f"Ricevuta risposta: {status}", file=os.sys.stderr)
+        return status
 def get_access_token():
     data = {
         "grant_type": "client_credentials",
@@ -82,8 +83,8 @@ def home():
 def flights():
     data = request.get_json()
     email=data.get("email")
-    x=UserVerification(email)
-    if x:
+    x=CheckUserStatus(email)
+    if x == service_pb2.UserStatus.ACTIVE:
         int = db.session.scalars(
             select(Flight)
             .join(Interest, Flight.est_departure_airport == Interest.airport_code)
@@ -100,9 +101,9 @@ def add_interest():
     email=data.get("email")
     #email="prova@prova.it"
     airport=data.get("airport", [])
-    x=UserVerification(email)
+    x=CheckUserStatus(email)
+    if x == service_pb2.UserStatus.ACTIVE:
     #print(f"x: {x}", file=os.sys.stderr)
-    if x:
         for index, a in enumerate(airport):
             y=Interest(email=email, airport_code=a)
             db.session.add(y)
@@ -117,14 +118,14 @@ def add_interest():
 def interest():
     data = request.get_json()
     email=data.get("email")
-    x=UserVerification(email)
-    if x:
+    x=CheckUserStatus(email)
+    if x == service_pb2.UserStatus.ACTIVE:
         int= db.session.scalars(db.select(Interest).where(Interest.email == email)).all()
         int_list = [{"email": i.email, "airport_code": i.airport_code} for i in int]
         return jsonify({"Interest": int_list}), 200
     else:
-        print(f"L'utente non esiste", file=os.sys.stderr)
-        return jsonify({"message": "L'utente non esiste"}), 200
+        print(f"L'utente non esiste o è stato eliminato", file=os.sys.stderr)
+        return jsonify({"message": "L'utente non esiste o è stato eliminato"}), 200
 @app.route("/last_flight/<airport_code>", methods=["GET"])
 def get_last_flight(airport_code):
     with app.app_context():
@@ -159,7 +160,7 @@ def get_last_flight(airport_code):
             return jsonify({"error": "Errore interno durante la query"}), 500
 @app.route("/average_flights/<airport_code>", methods=["GET"])
 def calculate_average_flights(airport_code):
-    days = request.args.get('days', 30, type=int) #default=7
+    days = request.args.get('days', 7, type=int) #default=7
     if days <= 0:
         return jsonify({"error": "Il numero di giorni (X) deve essere maggiore di zero."}), 400
     NOW_UTC = datetime.utcnow()
@@ -265,8 +266,22 @@ def get_flight_duration(airport_code):
                 "durata_formattata": str(min_duration)
             }
         }), 200
+def verify_users():
+    users = db.session.query(Interest.email).distinct().all()
+    users_removed = 0
+    #print(f"Verifica", file=os.sys.stderr)
+    for (email,) in users:
+        x=CheckUserStatus(email)
+        if x != service_pb2.UserStatus.ACTIVE:
+            print(f"Utente {email} non più attivo (Status: {x}). Rimozione interessi...", file=os.sys.stderr)
+            db.session.query(Interest).filter(Interest.email == email).delete()
+            users_removed += 1
+    if users_removed > 0:
+        db.session.commit()
+        print(f"Pulizia completata: rimossi interessi di {users_removed} utenti.", file=os.sys.stderr)
 def data_collection_job():
     with app.app_context():
+        verify_users()
         NOW_UTC = datetime.utcnow()
         BEGIN_DATETIME = NOW_UTC - timedelta(hours=24)
         END_DATETIME = NOW_UTC
@@ -318,7 +333,7 @@ def data_collection_job():
                 print(f"Errore durante la raccolta dati per {airport_icao}: {e}", file=os.sys.stderr)
                 db.session.rollback()
 def run_scheduler():
-    schedule.every(12).hours.do(data_collection_job)
+    schedule.every(20).seconds.do(data_collection_job)
     data_collection_job()
     while True:
         schedule.run_pending()

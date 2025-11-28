@@ -24,17 +24,19 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rservice.proto\"!\n\x10UserVerification\x12\r\n\x05\x65mail\x18\x01 \x01(\t\"\x1c\n\x08Response\x12\x10\n\x08validate\x18\x01 \x01(\x08\x32\x43\n\x12UserManagerService\x12-\n\rValidateEmail\x12\x11.UserVerification\x1a\t.Responseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rservice.proto\"!\n\x10UserVerification\x12\r\n\x05\x65mail\x18\x01 \x01(\t\"\'\n\x08Response\x12\x1b\n\x06status\x18\x01 \x01(\x0e\x32\x0b.UserStatus*A\n\nUserStatus\x12\x0b\n\x07UNKNOWN\x10\x00\x12\n\n\x06\x41\x43TIVE\x10\x01\x12\x0b\n\x07\x44\x45LETED\x10\x02\x12\r\n\tNOT_FOUND\x10\x03\x32\x45\n\x12UserManagerService\x12/\n\x0f\x43heckUserStatus\x12\x11.UserVerification\x1a\t.Responseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'service_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
+  _globals['_USERSTATUS']._serialized_start=93
+  _globals['_USERSTATUS']._serialized_end=158
   _globals['_USERVERIFICATION']._serialized_start=17
   _globals['_USERVERIFICATION']._serialized_end=50
   _globals['_RESPONSE']._serialized_start=52
-  _globals['_RESPONSE']._serialized_end=80
-  _globals['_USERMANAGERSERVICE']._serialized_start=82
-  _globals['_USERMANAGERSERVICE']._serialized_end=149
+  _globals['_RESPONSE']._serialized_end=91
+  _globals['_USERMANAGERSERVICE']._serialized_start=160
+  _globals['_USERMANAGERSERVICE']._serialized_end=229
 # @@protoc_insertion_point(module_scope)
