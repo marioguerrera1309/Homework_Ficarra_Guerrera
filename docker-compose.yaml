@@ -43,7 +43,7 @@ services:
       USERNAME_API: ${username}
       PASSWORD_API: ${password}
       GRPC_PORT: 50051
-      PERIODO: 20
+      PERIODO: 100000
     ports:
       - "5001:5000" #porta per API rest
   usermanager:

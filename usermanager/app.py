@@ -141,10 +141,15 @@ def run_hard_delete_user():
         schedule.run_pending()
         time.sleep(1)
 def delete_idempotency_key():
+    five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
     with app.app_context():
-        db.session.query(IdempotencyKey).delete()
+        rows_deleted = (
+            db.session.query(IdempotencyKey)
+            .filter(IdempotencyKey.completion_time < five_minutes_ago)
+            .delete(synchronize_session='fetch')
+        )
         db.session.commit()
-        #print(f"IdempotencyKey svuotata", file=os.sys.stderr)
+        #print(f"Cancellate {rows_deleted} chiavi di idempotenza più vecchie di 5 minuti.", file=os.sys.stderr)
 def run_delete_idempotency_key():
     schedule.every(int(os.environ.get('PERIODO'))).seconds.do(delete_idempotency_key)
     #print(f"[HARD DELETE]", file=os.sys.stderr)
