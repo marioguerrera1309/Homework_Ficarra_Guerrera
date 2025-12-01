@@ -32,7 +32,7 @@ services:
       timeout: 5s
       retries: 5
   datacollector:
-    build: ./datacollector # Percorso dove hai il Dockerfile del codice
+    build: ./datacollector
     container_name: datacollectorcontainer
     depends_on:
       data-db:
@@ -43,7 +43,7 @@ services:
       USERNAME_API: ${username}
       PASSWORD_API: ${password}
       GRPC_PORT: 50051
-      PERIODO: 100000
+      PERIODO: 10
     ports:
       - "5001:5000" #porta per API rest
   usermanager:
@@ -58,4 +58,4 @@ services:
     environment:
       DATABASE_URL: postgresql://mario:guerrera@user-db:5432/user_db
       GRPC_PORT: 50051
-      PERIODO: 20
+      PERIODO: 10
