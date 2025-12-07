@@ -37,6 +37,8 @@ services:
     depends_on:
       data-db:
         condition: service_healthy
+      kafka: # Nuova dipendenza da Kafka
+        condition: service_started
     environment:
       DATABASE_URL: postgresql://mario:guerrera@data-db:5432/data_db
       GRPC_USER_MANAGER_HOST: user-manager:50051
@@ -44,18 +46,88 @@ services:
       PASSWORD_API: ${password}
       GRPC_PORT: 50051
       PERIODO: 10
-    ports:
-      - "5001:5000" #porta per API rest
+      KAFKA_HOST: kafka:9092
+      KAFKA_TOPIC_ALERT: to-alert-system
   usermanager:
     build: ./usermanager
     container_name: usermanagercontainer
     depends_on:
       user-db:
         condition: service_healthy
-    ports:
-      - "5000:5000" #porta per API rest
-      - "50051:50051" #porta gRPC
     environment:
       DATABASE_URL: postgresql://mario:guerrera@user-db:5432/user_db
       GRPC_PORT: 50051
       PERIODO: 10
+
+  nginx:
+    image: nginx:latest
+    container_name: apigateway
+    # L'unica porta esterna esposta
+    ports:
+      - "80:80"
+    volumes:
+      # Monta il file di configurazione creato
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      usermanager:
+        condition: service_started # o service_healthy, se implementi l'healthcheck
+      datacollector:
+        condition: service_started
+
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka
+
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    ports:
+      - "9092:9092"
+
+    environment:
+      # --- KRaft single node ---
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_NODE_ID: 1
+      KAFKA_CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093
+
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # --- Single-node defaults ---
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+
+  alertsystem:
+    build: ./alertsystem
+    container_name: alertsystemcontainer
+    depends_on:
+      kafka:
+        condition: service_started
+      datacollector: # Necessario per recuperare le soglie utente (API REST)
+        condition: service_started
+    environment:
+      KAFKA_HOST: kafka:9092
+      TOPIC_IN: to-alert-system
+      TOPIC_OUT: to-notifier
+      DATA_COLLECTOR_HOST: datacollector:5000 # Porta interna DC
+
+  alertnotifiersystem:
+    build: ./alertnotifiersystem
+    container_name: alertnotifiersystemcontainer
+    depends_on:
+      kafka:
+        condition: service_started
+    environment:
+      KAFKA_HOST: kafka:9092
+      TOPIC_IN: to-notifier
+
+volumes:
+  kafka-data:

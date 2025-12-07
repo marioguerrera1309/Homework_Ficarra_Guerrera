@@ -6,3 +6,4 @@ protobuf
 requests
 sqlalchemy
 schedule
+confluent-kafka

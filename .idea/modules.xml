@@ -3,6 +3,8 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/Homework_Ficarra_Guerrera.iml" filepath="$PROJECT_DIR$/Homework_Ficarra_Guerrera.iml" />
+      <module fileurl="file://$PROJECT_DIR$/alertnotifiersystem/alertnotifiersystem.iml" filepath="$PROJECT_DIR$/alertnotifiersystem/alertnotifiersystem.iml" />
+      <module fileurl="file://$PROJECT_DIR$/alertsystem/alertsystem.iml" filepath="$PROJECT_DIR$/alertsystem/alertsystem.iml" />
       <module fileurl="file://$PROJECT_DIR$/datacollector/datacollector.iml" filepath="$PROJECT_DIR$/datacollector/datacollector.iml" />
       <module fileurl="file://$PROJECT_DIR$/usermanager/usermanager.iml" filepath="$PROJECT_DIR$/usermanager/usermanager.iml" />
     </modules>

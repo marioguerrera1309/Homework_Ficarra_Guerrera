@@ -10,5 +10,8 @@ CREATE TABLE IF NOT EXISTS flights (
 CREATE TABLE IF NOT EXISTS interests (
     email VARCHAR(255) NOT NULL,
     airport_code VARCHAR(10) NOT NULL,
+    high_value INTEGER,
+    low_value INTEGER,
     PRIMARY KEY (email, airport_code)
+    CONSTRAINT chk_thresholds CHECK (high_value IS NULL OR low_value IS NULL OR high_value > low_value)
 );
