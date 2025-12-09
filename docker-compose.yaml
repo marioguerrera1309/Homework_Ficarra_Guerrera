@@ -107,7 +107,7 @@ services:
       KAFKA_HOST: kafka:9092
       TOPIC_IN: to-alert-system
       TOPIC_OUT: to-notifier
-      DATA_COLLECTOR_HOST: datacollector:5000
+      DATA_COLLECTOR_HOST: apigate.com
   alertnotifiersystem:
     build: ./alertnotifiersystem
     container_name: alertnotifiersystemcontainer

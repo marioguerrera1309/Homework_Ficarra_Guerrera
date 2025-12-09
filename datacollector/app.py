@@ -343,6 +343,8 @@ def get_thresholds_by_airport(airport_code):
             {"email": t[0], "high_value": t[1], "low_value": t[2]}
             for t in thresholds
         ]
+        print(f"thresholds_list: {thresholds_list}", file=os.sys.stderr)
+        return jsonify(thresholds_list), 200
         return jsonify({"thresholds": thresholds_list}), 200
 def verify_users():
     users = db.session.query(Interest.email).distinct().all()
@@ -360,12 +362,14 @@ def verify_users():
 def data_collection_job():
     with app.app_context():
         verify_users()
+        print("QUI SIAMO ENTRATI. INIZIO DATA COLLECTION JOB")
         NOW_UTC = datetime.utcnow()
-        BEGIN_DATETIME = NOW_UTC - timedelta(hours=24)
+        BEGIN_DATETIME = NOW_UTC - timedelta(hours=8)
         END_DATETIME = NOW_UTC
         begin_ts = calendar.timegm(BEGIN_DATETIME.timetuple())
         end_ts = calendar.timegm(END_DATETIME.timetuple())
         interests = db.session.query(Interest.airport_code).distinct().all()
+        print(f"Stampa grande qua ci sta entrando")
         def fetch_flights_from_api(url, headers):
             response = requests.get(url, headers=headers)
             response.raise_for_status()
@@ -376,7 +380,7 @@ def data_collection_job():
                 auth_headers = {"Authorization": f"Bearer {TOKEN}"}
                 departures_url = f"{API_BASE_URL}/flights/departure?airport={airport_icao}&begin={begin_ts}&end={end_ts}"
                 flights_data_dep = opensky_breaker.call(fetch_flights_from_api, departures_url, auth_headers)
-                print(f"Flights collected: {flights_data_dep}", file=os.sys.stderr)
+                #print(f"Flights collected: {flights_data_dep}", file=os.sys.stderr)
                 for f in flights_data_dep:
                     new_flight = Flight(
                         icao24=f.get("icao24"),

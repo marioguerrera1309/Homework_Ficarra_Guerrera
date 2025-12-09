@@ -7,7 +7,7 @@ from confluent_kafka import Consumer, Producer, KafkaException, KafkaError
 KAFKA_HOST = os.environ.get('KAFKA_HOST')
 TOPIC_IN = os.environ.get('TOPIC_IN', 'to-alert-system')
 TOPIC_OUT = os.environ.get('TOPIC_OUT', 'to-notifier')
-DC_HOST = os.environ.get('DATA_COLLECTOR_HOST', 'datacollector:5000')
+DC_HOST = os.environ.get('DATA_COLLECTOR_HOST', 'apigate.com')
 consumer_config = {
     'bootstrap.servers': KAFKA_HOST,
     'group.id': 'alert_system_group',
@@ -30,16 +30,17 @@ def get_thresholds(airport_code):
     try:
         response = requests.get(url, timeout=5)
         response.raise_for_status()
+        print(f"thresholds_list: {response}", file=os.sys.stderr)
         return response.json().get('thresholds', [])
     except requests.exceptions.RequestException as e:
         print(f"[ERROR DC] Impossibile contattare Data Collector: {e}", file=os.sys.stderr)
         return []
 def check_and_notify(flight_data, offset_to_commit):
-    """Verifica le soglie e produce un messaggio di notifica se superate."""
     airport_code = flight_data.get('airport_code')
     total_flights = flight_data.get('total_flights')
     if not airport_code or total_flights is None:
         return
+    print(f"Check and notify", file=os.sys.stderr)
     thresholds = get_thresholds(airport_code)
     for th in thresholds:
         email = th['email']
@@ -48,10 +49,10 @@ def check_and_notify(flight_data, offset_to_commit):
         condition = None
         threshold_met = None
         if high is not None and total_flights > high:
-            condition = "SUPERATA_ALTA"
+            condition = "SUPERATA_SOGLIA_ALTA"
             threshold_met = high
         elif low is not None and total_flights < low:
-            condition = "SUPERATA_BASSA"
+            condition = "SUPERATA_SOGLIA_BASSA"
             threshold_met = low
         if condition:
             payload = {
@@ -70,7 +71,7 @@ def check_and_notify(flight_data, offset_to_commit):
     producer.poll(0) # Trigger callbacks
     print(f"[ALERT COMMITTED] Offset {offset_to_commit.offset()} per {airport_code}", file=os.sys.stderr)
 def start_alert_system():
-    print(f"[ALERT SYSTEM] Avvio consumer su topic {TOPIC_IN} con broker {KAFKA_HOST}...")
+    print(f"[ALERT SYSTEM] Avvio consumer su topic {TOPIC_IN} con broker {KAFKA_HOST}...", file=os.sys.stderr)
     try:
         while True:
             msg = consumer.poll(1.0)
