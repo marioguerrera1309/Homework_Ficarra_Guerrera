@@ -13,5 +13,4 @@ CREATE TABLE IF NOT EXISTS interests (
     high_value INTEGER,
     low_value INTEGER,
     PRIMARY KEY (email, airport_code)
-    CONSTRAINT chk_thresholds CHECK (high_value IS NULL OR low_value IS NULL OR high_value > low_value)
 );

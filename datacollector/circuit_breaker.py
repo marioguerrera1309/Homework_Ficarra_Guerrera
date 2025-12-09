@@ -1,6 +1,5 @@
 import time
 import threading
-
 class CircuitBreaker:
     def __init__(self, failure_threshold=5, recovery_timeout=30, expected_exception=Exception):
         """

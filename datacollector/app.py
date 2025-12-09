@@ -14,31 +14,26 @@ import threading
 from datetime import datetime, timedelta
 from sqlalchemy import select, func, cast, BigInteger
 from sqlalchemy.sql.expression import text
-from .circuit_breaker import CircuitBreaker, CircuitBreakerOpenException
+from circuit_breaker import CircuitBreaker, CircuitBreakerOpenException
 from confluent_kafka import Producer
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 API_BASE_URL = "https://opensky-network.org/api"
-
 opensky_breaker = CircuitBreaker(
     failure_threshold=5,
     recovery_timeout=60,
     expected_exception=requests.exceptions.RequestException
 )
-
 KAFKA_HOST = os.environ.get('KAFKA_HOST')
 KAFKA_TOPIC_ALERT = os.environ.get('KAFKA_TOPIC_ALERT', 'to-alert-system')
-
 producer_config = {
     'bootstrap.servers': KAFKA_HOST, # KAFKA_HOST è già definito come kafka:9092
     'acks': 'all',
     'retries': 3,
 }
-
 producer = Producer(producer_config)
-
 class Flight(db.Model):
     __tablename__ = 'flights'
     icao24 = db.Column(db.String(50), primary_key=True) #idvolo
@@ -73,7 +68,6 @@ def CheckUserStatus(email):
         status=response.status
         print(f"Ricevuta risposta: {status}", file=os.sys.stderr)
         return status
-
 def get_access_token_logic():
     data = {
         "grant_type": "client_credentials",
@@ -97,9 +91,6 @@ def get_access_token_logic():
     except requests.exceptions.RequestException as e:
         print(f"Errore nella richiesta del token: {e}")
         raise e
-
-
-
 def get_access_token():
     try:
         return opensky_breaker.call(get_access_token_logic)
@@ -108,12 +99,9 @@ def get_access_token():
         return None
     except Exception as e:
         raise e
-
-
 def delivery_report(err, msg):
     if err:
         print(f"[KAFKA DELIVERY ERROR] Delivery failed: {err}", file=os.sys.stderr)
-
 def publish_flight_count(airport_code, total_flights):
     payload = {
         "airport_code": airport_code,
@@ -127,11 +115,9 @@ def publish_flight_count(airport_code, total_flights):
             callback=delivery_report
         )
         producer.poll(0)
-
         print(f"[KAFKA PRODUCER] Inviati dati su {airport_code} a {KAFKA_TOPIC_ALERT}.", file=os.sys.stderr)
     except Exception as e:
         print(f"[KAFKA ERROR] Errore invio Kafka per {airport_code}: {e}", file=os.sys.stderr)
-
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({"message": "Data Collector is running"}), 200
@@ -169,25 +155,20 @@ def add_interest():
                 high_value = interest_data.get("high_value")
                 low_value = interest_data.get("low_value")
                 airport_code = interest_data.get("airport_code")
-
                 if high_value is not None:
                     high_value = int(high_value)
                 if low_value is not None:
                     low_value = int(low_value)
-
                 if not airport_code:
                     return jsonify({"error": "Campo 'airport_code' mancante in un elemento"}), 400
-
                 if high_value is not None and low_value is not None and high_value <= low_value:
                     return jsonify({"error": f"Per l'aeroporto {airport_code}, high-value deve essere maggiore di low-value."}), 400
-
                 new_interest = Interest(
                     email=email,
                     airport_code=airport_code,
                     high_value=high_value,
                     low_value=low_value
                 )
-
                 db.session.merge(new_interest)
             db.session.commit()
             return jsonify({"message": f"Utente {email} verificato e {len(airport)} interessi aggiunti."}), 200
@@ -350,7 +331,6 @@ def get_flight_duration(airport_code):
                 "durata_formattata": str(min_duration)
             }
         }), 200
-
 @app.route('/thresholds/<airport_code>', methods=['GET'])
 def get_thresholds_by_airport(airport_code):
     with app.app_context():
@@ -359,14 +339,11 @@ def get_thresholds_by_airport(airport_code):
             .where(Interest.airport_code == airport_code)
             .filter((Interest.high_value.isnot(None)) | (Interest.low_value.isnot(None)))
         ).all()
-
         thresholds_list = [
             {"email": t[0], "high_value": t[1], "low_value": t[2]}
             for t in thresholds
         ]
-
         return jsonify({"thresholds": thresholds_list}), 200
-
 def verify_users():
     users = db.session.query(Interest.email).distinct().all()
     users_removed = 0
@@ -388,22 +365,18 @@ def data_collection_job():
         END_DATETIME = NOW_UTC
         begin_ts = calendar.timegm(BEGIN_DATETIME.timetuple())
         end_ts = calendar.timegm(END_DATETIME.timetuple())
-
         interests = db.session.query(Interest.airport_code).distinct().all()
-
         def fetch_flights_from_api(url, headers):
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             return response.json()
-
         for (airport_icao,) in interests:
             flights_collected = 0
-
             try:
                 auth_headers = {"Authorization": f"Bearer {TOKEN}"}
                 departures_url = f"{API_BASE_URL}/flights/departure?airport={airport_icao}&begin={begin_ts}&end={end_ts}"
                 flights_data_dep = opensky_breaker.call(fetch_flights_from_api, departures_url, auth_headers)
-
+                print(f"Flights collected: {flights_data_dep}", file=os.sys.stderr)
                 for f in flights_data_dep:
                     new_flight = Flight(
                         icao24=f.get("icao24"),
@@ -415,11 +388,8 @@ def data_collection_job():
                     )
                     db.session.merge(new_flight)
                     flights_collected += 1
-
-                # --- VOLI IN ARRIVO ---
                 arrival_url = f"{API_BASE_URL}/flights/arrival?airport={airport_icao}&begin={begin_ts}&end={end_ts}"
                 flights_data_arr = opensky_breaker.call(fetch_flights_from_api, arrival_url, auth_headers)
-
                 for f in flights_data_arr:
                     new_flight = Flight(
                         icao24=f.get("icao24"),
@@ -431,13 +401,10 @@ def data_collection_job():
                     )
                     db.session.merge(new_flight)
                     flights_collected += 1
-
                 db.session.commit()
                 print(f"Salvati {flights_collected} voli totali per {airport_icao}.", file=os.sys.stderr)
-
                 if flights_collected > 0:
                     publish_flight_count(airport_icao, flights_collected)
-
             except CircuitBreakerOpenException:
                 print(f"[{airport_icao}] Circuit Breaker APERTO. Saltata la raccolta per questo aeroporto.", file=os.sys.stderr)
                 db.session.rollback()
@@ -446,7 +413,6 @@ def data_collection_job():
                 print(f"Errore non gestito durante la raccolta dati per {airport_icao}: {e}", file=os.sys.stderr)
                 db.session.rollback()
                 continue
-
 def run_scheduler():
     schedule.every(int(os.environ.get('PERIODO'))).seconds.do(data_collection_job)
     data_collection_job()
