@@ -26,14 +26,20 @@ opensky_breaker = CircuitBreaker(
     recovery_timeout=60,
     expected_exception=requests.exceptions.RequestException
 )
-KAFKA_HOST = os.environ.get('KAFKA_HOST')
-KAFKA_TOPIC_ALERT = os.environ.get('KAFKA_TOPIC_ALERT', 'to-alert-system')
+
 producer_config = {
-    'bootstrap.servers': KAFKA_HOST, # KAFKA_HOST è già definito come kafka:9092
-    'acks': 'all',
-    'retries': 3,
+    'bootstrap.servers': os.environ.get('KAFKA_BROKER_LIST'),
+    'acks': 'all',  # Maximum durability - waits for all in-sync replicas
+    'batch.size': 500,  #just an example, use default (16KB) which is more efficient
+    'max.in.flight.requests.per.connection': 1,  # Only one in-flight request,default (5) is balanced
+    'retries': 3,  # Retry on transient errors
+    'linger.ms': 10,  # Wait 10ms to batch messages (reduces overhead)
 }
+
 producer = Producer(producer_config)
+topic1 = 'to-alert-system'
+
+
 class Flight(db.Model):
     __tablename__ = 'flights'
     icao24 = db.Column(db.String(50), primary_key=True) #idvolo
@@ -99,25 +105,43 @@ def get_access_token():
         return None
     except Exception as e:
         raise e
+
 def delivery_report(err, msg):
     if err:
-        print(f"[KAFKA DELIVERY ERROR] Delivery failed: {err}", file=os.sys.stderr)
-def publish_flight_count(airport_code, total_flights):
+        print(f"Delivery failed: {err}")
+    else:
+        print(f"Message delivered to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}")
+
+def publish_flight_count(airport_code, total_flights, user_thresholds):
     payload = {
         "airport_code": airport_code,
         "total_flights": total_flights,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
+        # Campo critico aggiunto: i dati delle soglie
+        "users_and_thresholds": user_thresholds
     }
     try:
         producer.produce(
-            KAFKA_TOPIC_ALERT,
-            json.dumps(payload).encode('utf-8'),
+            topic1,
+            json.dumps(payload).encode('utf-8'),  # Explicit encoding
             callback=delivery_report
         )
+        print(f"[KAFKA PRODUCER] Inviati dati su {airport_code} a {topic1}.", file=os.sys.stderr)
         producer.poll(0)
-        print(f"[KAFKA PRODUCER] Inviati dati su {airport_code} a {KAFKA_TOPIC_ALERT}.", file=os.sys.stderr)
+        time.sleep(10)  # Simulate slow production rate
+
     except Exception as e:
         print(f"[KAFKA ERROR] Errore invio Kafka per {airport_code}: {e}", file=os.sys.stderr)
+
+    finally:
+        # flush() ensures all pending messages are sent before exit
+        print("Flushing remaining messages...")
+        remaining = producer.flush(timeout=10)  # Wait max 10 seconds
+        if remaining > 0:
+            print(f"Warning: {remaining} messages were not delivered")
+        else:
+            print("All messages delivered successfully")
+
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({"message": "Data Collector is running"}), 200
@@ -150,7 +174,7 @@ def add_interest():
     else:
         x=CheckUserStatus(email)
         if x == service_pb2.UserStatus.ACTIVE:
-        #print(f"x: {x}", file=os.sys.stderr)
+            #print(f"x: {x}", file=os.sys.stderr)
             for interest_data in airport:
                 high_value = interest_data.get("high_value")
                 low_value = interest_data.get("low_value")
@@ -331,21 +355,7 @@ def get_flight_duration(airport_code):
                 "durata_formattata": str(min_duration)
             }
         }), 200
-@app.route('/thresholds/<airport_code>', methods=['GET'])
-def get_thresholds_by_airport(airport_code):
-    with app.app_context():
-        thresholds = db.session.execute(
-            select(Interest.email, Interest.high_value, Interest.low_value)
-            .where(Interest.airport_code == airport_code)
-            .filter((Interest.high_value.isnot(None)) | (Interest.low_value.isnot(None)))
-        ).all()
-        thresholds_list = [
-            {"email": t[0], "high_value": t[1], "low_value": t[2]}
-            for t in thresholds
-        ]
-        print(f"thresholds_list: {thresholds_list}", file=os.sys.stderr)
-        return jsonify(thresholds_list), 200
-        return jsonify({"thresholds": thresholds_list}), 200
+
 def verify_users():
     users = db.session.query(Interest.email).distinct().all()
     users_removed = 0
@@ -372,6 +382,16 @@ def data_collection_job():
         print(f"Stampa grande qua ci sta entrando")
         def fetch_flights_from_api(url, headers):
             response = requests.get(url, headers=headers)
+
+            remaining_credits = response.headers.get('X-Rate-Limit-Remaining')
+            retry_after = response.headers.get('X-Rate-Limit-Retry-After-Seconds')
+
+            if remaining_credits:
+                print(f"Crediti OpenSky Rimanenti: {remaining_credits}", file=os.sys.stderr)
+
+            if response.status_code == 429 and retry_after:
+                print(f"Limite Superato (429). Attendere {retry_after} secondi.", file=os.sys.stderr)
+
             response.raise_for_status()
             return response.json()
         for (airport_icao,) in interests:
@@ -407,8 +427,20 @@ def data_collection_job():
                     flights_collected += 1
                 db.session.commit()
                 print(f"Salvati {flights_collected} voli totali per {airport_icao}.", file=os.sys.stderr)
-                if flights_collected > 0:
-                    publish_flight_count(airport_icao, flights_collected)
+
+                thresholds_result = db.session.execute(
+                    select(Interest.email, Interest.high_value, Interest.low_value)
+                    .where(Interest.airport_code == airport_icao)
+                    .filter((Interest.high_value.isnot(None)) | (Interest.low_value.isnot(None)))
+                ).all()
+
+                user_thresholds = [
+                    {"email": t.email, "high_value": t.high_value, "low_value": t.low_value}
+                    for t in thresholds_result
+                ]
+
+                if flights_collected > 0 and user_thresholds:
+                    publish_flight_count(airport_icao, flights_collected, user_thresholds)
             except CircuitBreakerOpenException:
                 print(f"[{airport_icao}] Circuit Breaker APERTO. Saltata la raccolta per questo aeroporto.", file=os.sys.stderr)
                 db.session.rollback()

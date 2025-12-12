@@ -35,19 +35,19 @@ services:
     build: ./datacollector
     container_name: datacollectorcontainer
     depends_on:
-      data-db:
-        condition: service_healthy
       kafka:
         condition: service_started
+      data-db:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://mario:guerrera@data-db:5432/data_db
       GRPC_USER_MANAGER_HOST: user-manager:50051
       USERNAME_API: ${username}
       PASSWORD_API: ${password}
       GRPC_PORT: 50051
-      PERIODO: 10
-      KAFKA_HOST: kafka:9092
-      KAFKA_TOPIC_ALERT: to-alert-system
+      PERIODO: 300
+      KAFKA_BROKER_LIST: kafkabasic_kafka_1:9092
+      TOPIC_INPUT_NAME: to-alert-system
   usermanager:
     build: ./usermanager
     container_name: usermanagercontainer
@@ -75,39 +75,46 @@ services:
         condition: service_started
   kafka:
     image: confluentinc/cp-kafka:7.4.0
-    container_name: kafka
-    volumes:
-      - kafka-data:/var/lib/kafka/data
+    container_name: kafkabasic_kafka_1
     ports:
-      - "9092:9092"
+      - "29092:29092"                    # host -> broker
     environment:
+      # --- KRaft single node ---
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_NODE_ID: 1
-      CLUSTER_ID: x5cg3q9LSQa0hMh5gtbm4w
-      KAFKA_CLUSTER_ID: x5cg3q9LSQa0hMh5gtbm4w
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafkabasic_kafka_1:29093
+
+      # --- Listener & advertised ---
+      # 9092 per i client interni al container; 29092 per l'host
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafkabasic_kafka_1:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # --- Single-node defaults ---
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      # --- Dati ---
       KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
   alertsystem:
     build: ./alertsystem
     container_name: alertsystemcontainer
     depends_on:
       kafka:
         condition: service_started
-      datacollector:
-        condition: service_started
+
     environment:
-      KAFKA_HOST: kafka:9092
-      TOPIC_IN: to-alert-system
-      TOPIC_OUT: to-notifier
-      DATA_COLLECTOR_HOST: apigate.com
+      KAFKA_BROKER_LIST: kafkabasic_kafka_1:9092
+      TOPIC_INPUT_NAME: to-alert-system
+      TOPIC_OUTPUT_NAME: to-notifier
+      CONSUMER_GROUP_ID: processor-group # Ogni consumer group deve avere un ID univoco
   alertnotifiersystem:
     build: ./alertnotifiersystem
     container_name: alertnotifiersystemcontainer
@@ -115,7 +122,12 @@ services:
       kafka:
         condition: service_started
     environment:
-      KAFKA_HOST: kafka:9092
-      TOPIC_IN: to-notifier
+      KAFKA_BROKER_LIST: kafkabasic_kafka_1:9092
+      TOPIC_INPUT_NAME: to-notifier
+      CONSUMER_GROUP_ID: final-consumer-group # Un altro ID di gruppo univoco
+      SMTP_SERVER: ${SMTP_SERVER}
+      SMTP_PORT: ${SMTP_PORT}
+      SENDER_EMAIL: ${SENDER_EMAIL}
+      SENDER_PASSWORD: ${SENDER_PASSWORD}
 volumes:
   kafka-data:
