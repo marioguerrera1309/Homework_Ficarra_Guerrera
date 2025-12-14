@@ -45,7 +45,7 @@ services:
       USERNAME_API: ${username}
       PASSWORD_API: ${password}
       GRPC_PORT: 50051
-      PERIODO: 10
+      PERIODO: 100
       KAFKA_BROKER_LIST: kafkabasic_kafka_1:9092
       TOPIC_INPUT_NAME: to-alert-system
   usermanager:

@@ -206,6 +206,59 @@ def add_interest():
             print(f"L'utente non esiste", file=os.sys.stderr)
             return jsonify({"message": "L'utente non esiste"}), 200
 
+@app.route('/add_values', methods=['POST'])
+def add_values():
+    data = request.get_json()
+    email = data.get("email")
+    airport_code = data.get("airport_code")
+    high_value_input = data.get("high_value")
+    low_value_input = data.get("low_value")
+
+    if not email or not airport_code:
+        return jsonify({"message": "I campi 'email' e 'airport_code' sono obbligatori."}), 400
+
+    x = CheckUserStatus(email)
+
+    if x != service_pb2.UserStatus.ACTIVE:
+        print(f"L'utente non esiste o è stato eliminato", file=os.sys.stderr)
+        return jsonify({"message": "L'utente non esiste o è stato eliminato"}), 404 # 404 per risorsa utente non attiva
+
+    existing_interest = db.session.scalar(
+        select(Interest).where(
+            (Interest.email == email) & (Interest.airport_code == airport_code)
+        )
+    )
+
+    if existing_interest is None:
+        return jsonify({"message": f"Nessun interesse esistente trovato per {email} e {airport_code}. Impossibile aggiornare. Utilizza /add_interest per l'inserimento iniziale."}), 404
+
+    high_value_new = None
+    if high_value_input is not None:
+        try:
+            high_value_new = int(high_value_input)
+        except ValueError:
+            return jsonify({"error": "high_value deve essere un numero intero."}), 400
+
+    low_value_new = None
+    if low_value_input is not None:
+        try:
+            low_value_new = int(low_value_input)
+        except ValueError:
+            return jsonify({"error": "low_value deve essere un numero intero."}), 400
+
+    final_high = high_value_new if high_value_new is not None else existing_interest.high_value
+    final_low = low_value_new if low_value_new is not None else existing_interest.low_value
+
+    if final_high is not None and final_low is not None and final_high <= final_low:
+        return jsonify({"error": f"Per l'aeroporto {airport_code}, high-value ({final_high}) deve essere maggiore di low-value ({final_low})."}), 400
+
+    existing_interest.high_value = final_high
+    existing_interest.low_value = final_low
+
+    db.session.add(existing_interest)
+    db.session.commit()
+
+    return jsonify({"message": f"Interessi per {email} su {airport_code} aggiornati con successo."}), 201
 @app.route('/interest', methods=['POST'])
 def interest():
     data = request.get_json()
@@ -441,7 +494,6 @@ def data_collection_job():
                 thresholds_result = db.session.execute(
                     select(Interest.email, Interest.high_value, Interest.low_value)
                     .where(Interest.airport_code == airport_icao)
-                    .filter((Interest.high_value.isnot(None)) | (Interest.low_value.isnot(None)))
                 ).all()
 
                 user_thresholds = [

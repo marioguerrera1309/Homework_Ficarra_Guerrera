@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS flights (
 CREATE TABLE IF NOT EXISTS interests (
     email VARCHAR(255) NOT NULL,
     airport_code VARCHAR(10) NOT NULL,
-    high_value INTEGER,
-    low_value INTEGER,
+    high_value INTEGER DEFAULT NULL,
+    low_value INTEGER DEFAULT NULL,
     PRIMARY KEY (email, airport_code)
 );
