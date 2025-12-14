@@ -1,50 +1,45 @@
 from confluent_kafka import Consumer, Producer, KafkaException
 import json
 import os
-from datetime import datetime
 from collections import deque
 
 KAFKA_BROKER_LIST = os.environ.get('KAFKA_BROKER_LIST')
-# Consumer configuration
+
 consumer_config = {
     'bootstrap.servers': KAFKA_BROKER_LIST,
     'group.id': 'processor-group',
     'auto.offset.reset': 'earliest',
-    'enable.auto.commit': False,  # Manual commit for better control
+    'enable.auto.commit': False,
 }
 
-# Producer configuration
 producer_config = {
     'bootstrap.servers': KAFKA_BROKER_LIST,
-    'linger.ms': 100,  # Batching for efficiency
+    'linger.ms': 100,
 }
 
 consumer = Consumer(consumer_config)
 producer = Producer(producer_config)
 
-topic1 = 'to-alert-system'  # Source topic for input messages
-topic2 = 'to-notifier'  # Destination topic for output statistics
+topic1 = 'to-alert-system'
+topic2 = 'to-notifier'
 
-# Use deque with maxlen for sliding window (prevents memory leak)
-WINDOW_SIZE = 100  # Keep only last 100 values
-values = deque(maxlen=WINDOW_SIZE)
+
 
 consumer.subscribe([topic1])
 
 def delivery_report(err, msg):
-    """Callback to verify production to TOPIC2"""
     if err:
         print(f"[KAFKA PROD ERROR] Failed to produce to {topic2}: {err}")
     else:
         print(f"Stats sent to {topic2} at offset {msg.offset()}")
 
-def process_and_produce(flight_data):
+def process_and_produce(flight_data, msg):
     airport_code = flight_data.get('airport_code')
     total_flights = flight_data.get('total_flights')
-    thresholds = flight_data.get('users_and_thresholds', []) # Prendi il nuovo campo
+    thresholds = flight_data.get('users_and_thresholds', [])
 
     if not airport_code or total_flights is None or not thresholds:
-        # Commit e salta se mancano dati o non ci sono utenti da avvisare
+
         consumer.commit(msg, asynchronous=False)
         return
 
@@ -79,43 +74,31 @@ def process_and_produce(flight_data):
     producer.poll(0)
 
 try:
-    print(f"Consumer-Producer started. Window size: {WINDOW_SIZE}")
-    message_count = 0
-
     while True:
-        # Poll with timeout
         msg = consumer.poll(1.0)
 
         if msg is None:
             continue
 
         if msg.error():
-            # Specific error handling
+
             if msg.error().code() == KafkaException._PARTITION_EOF:
                 print(f"End of partition {msg.partition()}")
             else:
                 print(f"Consumer error: {msg.error()}")
             continue
 
-        # Parse message
         try:
             flight_data = json.loads(msg.value().decode('utf-8'))
             print(f"[RECEIVED] Dati volo da DC: {flight_data['airport_code']} ({flight_data['total_flights']} voli)", file=os.sys.stderr)
-            process_and_produce(flight_data)
-            message_count += 1
-        except (json.JSONDecodeError, KeyError) as e:
+            process_and_produce(flight_data, msg)
 
-            print(f"[ERROR PARSING] Messaggio malformato: {e}", file=os.sys.stderr)
-
-            # Improvement: Commit every N messages instead of always
-            if message_count % 10 == 0:
-                consumer.commit(asynchronous=False)
-                print(f"Committed offset {msg.offset()}")
+            consumer.commit(msg, asynchronous=False)
+            print(f"[COMMIT SUCCESS] Messaggio {msg.offset()} elaborato e offset committato.", file=os.sys.stderr)
 
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Malformed message: {e}")
-            # Commit malformed messages to avoid reprocessing
-            consumer.commit(msg)
+            consumer.commit(msg, asynchronous=False)
             continue
 
 except KeyboardInterrupt:
