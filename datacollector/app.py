@@ -20,14 +20,12 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
-
 API_BASE_URL = "https://opensky-network.org/api"
 opensky_breaker = CircuitBreaker(
     failure_threshold=5,
     recovery_timeout=30,
     expected_exception=requests.exceptions.RequestException
 )
-
 producer_config = {
     'bootstrap.servers': os.environ.get('KAFKA_BROKER_LIST'),
     'acks': 'all',
@@ -36,11 +34,8 @@ producer_config = {
     'retries': 3,
     'linger.ms': 10,
 }
-
 producer = Producer(producer_config)
 topic1 = 'to-alert-system'
-
-
 class Flight(db.Model):
     __tablename__ = 'flights'
     icao24 = db.Column(db.String(50), primary_key=True)
@@ -50,14 +45,12 @@ class Flight(db.Model):
     first_seen_utc = db.Column(db.String(30), nullable=True)
     last_seen_utc = db.Column(db.String(30), nullable=True)
     ingestion_time = db.Column(db.DateTime, default=datetime.utcnow)
-
 class Interest(db.Model):
     __tablename__ = 'interests'
     email = db.Column(db.String(255), primary_key=True)
     airport_code = db.Column(db.String(10), primary_key=True)
     high_value = db.Column(db.Integer, nullable=True)
     low_value = db.Column(db.Integer, nullable=True)
-
 class User(db.Model):
     __tablename__ = 'users'
     email = db.Column(db.String(255), primary_key=True)
@@ -65,12 +58,10 @@ class User(db.Model):
     surname = db.Column(db.String(100), nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
-
 TOKEN_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
 API_BASE_URL = "https://opensky-network.org/api"
 TOKEN=None
 SERVER_ADDRESS='usermanager:'+os.environ.get('GRPC_PORT')
-
 def CheckUserStatus(email):
     with grpc.insecure_channel(SERVER_ADDRESS) as channel:
         stub=service_pb2_grpc.UserManagerServiceStub(channel)
@@ -79,7 +70,6 @@ def CheckUserStatus(email):
         status=response.status
         print(f"Ricevuta risposta: {status}", file=os.sys.stderr)
         return status
-
 def get_access_token_logic():
     data = {
         "grant_type": "client_credentials",
@@ -103,7 +93,6 @@ def get_access_token_logic():
     except requests.exceptions.RequestException as e:
         print(f"Errore nella richiesta del token: {e}")
         raise e
-
 def get_access_token():
     try:
         return opensky_breaker.call(get_access_token_logic)
@@ -112,13 +101,11 @@ def get_access_token():
         return None
     except Exception as e:
         raise e
-
 def delivery_report(err, msg):
     if err:
         print(f"Delivery failed: {err}")
     else:
         print(f"Message delivered to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}")
-
 def publish_flight_count(airport_code, total_flights, user_thresholds):
     payload = {
         "airport_code": airport_code,
@@ -135,10 +122,8 @@ def publish_flight_count(airport_code, total_flights, user_thresholds):
         print(f"[KAFKA PRODUCER] Inviati dati su {airport_code} a {topic1}.", file=os.sys.stderr)
         producer.poll(0)
         time.sleep(10)
-
     except Exception as e:
         print(f"[KAFKA ERROR] Errore invio Kafka per {airport_code}: {e}", file=os.sys.stderr)
-
     finally:
         print("Flushing remaining messages...")
         remaining = producer.flush(timeout=10)
@@ -146,11 +131,9 @@ def publish_flight_count(airport_code, total_flights, user_thresholds):
             print(f"Warning: {remaining} messages were not delivered")
         else:
             print("All messages delivered successfully")
-
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({"message": "Data Collector is running"}), 200
-
 @app.route('/flights', methods=['POST'])
 def flights():
     data = request.get_json()
@@ -170,7 +153,6 @@ def flights():
         else:
             print(f"L'utente non esiste", file=os.sys.stderr)
             return jsonify({"message": "L'utente non esiste"}), 200
-
 @app.route('/add_interest', methods=['POST'])
 def add_interest():
     data = request.get_json()
@@ -205,7 +187,6 @@ def add_interest():
         else:
             print(f"L'utente non esiste", file=os.sys.stderr)
             return jsonify({"message": "L'utente non esiste"}), 200
-
 @app.route('/add_values', methods=['POST'])
 def add_values():
     data = request.get_json()
@@ -213,51 +194,39 @@ def add_values():
     airport_code = data.get("airport_code")
     high_value_input = data.get("high_value")
     low_value_input = data.get("low_value")
-
     if not email or not airport_code:
         return jsonify({"message": "I campi 'email' e 'airport_code' sono obbligatori."}), 400
-
     x = CheckUserStatus(email)
-
     if x != service_pb2.UserStatus.ACTIVE:
         print(f"L'utente non esiste o è stato eliminato", file=os.sys.stderr)
         return jsonify({"message": "L'utente non esiste o è stato eliminato"}), 404 # 404 per risorsa utente non attiva
-
     existing_interest = db.session.scalar(
         select(Interest).where(
             (Interest.email == email) & (Interest.airport_code == airport_code)
         )
     )
-
     if existing_interest is None:
         return jsonify({"message": f"Nessun interesse esistente trovato per {email} e {airport_code}. Impossibile aggiornare. Utilizza /add_interest per l'inserimento iniziale."}), 404
-
     high_value_new = None
     if high_value_input is not None:
         try:
             high_value_new = int(high_value_input)
         except ValueError:
             return jsonify({"error": "high_value deve essere un numero intero."}), 400
-
     low_value_new = None
     if low_value_input is not None:
         try:
             low_value_new = int(low_value_input)
         except ValueError:
             return jsonify({"error": "low_value deve essere un numero intero."}), 400
-
     final_high = high_value_new if high_value_new is not None else existing_interest.high_value
     final_low = low_value_new if low_value_new is not None else existing_interest.low_value
-
     if final_high is not None and final_low is not None and final_high <= final_low:
         return jsonify({"error": f"Per l'aeroporto {airport_code}, high-value ({final_high}) deve essere maggiore di low-value ({final_low})."}), 400
-
     existing_interest.high_value = final_high
     existing_interest.low_value = final_low
-
     db.session.add(existing_interest)
     db.session.commit()
-
     return jsonify({"message": f"Interessi per {email} su {airport_code} aggiornati con successo."}), 201
 @app.route('/interest', methods=['POST'])
 def interest():
@@ -430,23 +399,16 @@ def verify_users():
     if users_removed > 0:
         db.session.commit()
         print(f"Pulizia completata: rimossi interessi di {users_removed} utenti.", file=os.sys.stderr)
-
 def fetch_flights_from_api(url, headers):
     response = requests.get(url, headers=headers)
-
     remaining_credits = response.headers.get('X-Rate-Limit-Remaining')
     retry_after = response.headers.get('X-Rate-Limit-Retry-After-Seconds')
-
     if remaining_credits:
         print(f"Crediti OpenSky Rimanenti: {remaining_credits}", file=os.sys.stderr)
-
     if response.status_code == 429 and retry_after:
         print(f"Limite Superato (429). Attendere {retry_after} secondi.", file=os.sys.stderr)
-
     response.raise_for_status()
     return response.json()
-
-
 def data_collection_job():
     with app.app_context():
         verify_users()
@@ -490,17 +452,14 @@ def data_collection_job():
                     flights_collected += 1
                 db.session.commit()
                 print(f"Salvati {flights_collected} voli totali per {airport_icao}.", file=os.sys.stderr)
-
                 thresholds_result = db.session.execute(
                     select(Interest.email, Interest.high_value, Interest.low_value)
                     .where(Interest.airport_code == airport_icao)
                 ).all()
-
                 user_thresholds = [
                     {"email": t.email, "high_value": t.high_value, "low_value": t.low_value}
                     for t in thresholds_result
                 ]
-
                 if flights_collected > 0 and user_thresholds:
                     publish_flight_count(airport_icao, flights_collected, user_thresholds)
             except CircuitBreakerOpenException:
@@ -526,8 +485,6 @@ if __name__ == '__main__':
             data_collection_job()
             scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
             scheduler_thread.start()
-
         else:
             print("Errore critico: Impossibile ottenere il token OpenSky. Uscita.", file=os.sys.stderr)
-
     app.run(host='0.0.0.0', port=5000, debug=True)
