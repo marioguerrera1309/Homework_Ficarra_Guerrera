@@ -243,7 +243,6 @@ def interest():
         else:
             print(f"L'utente non esiste o è stato eliminato", file=os.sys.stderr)
             return jsonify({"message": "L'utente non esiste o è stato eliminato"}), 200
-
 @app.route("/last_flight/<airport_code>", methods=["GET"])
 def get_last_flight(airport_code):
     with app.app_context():
@@ -276,7 +275,6 @@ def get_last_flight(airport_code):
         except Exception as e:
             app.logger.error(f"Errore nel recupero dell'ultimo volo: {e}")
             return jsonify({"error": "Errore interno durante la query"}), 500
-
 @app.route("/average_flights/<airport_code>", methods=["GET"])
 def calculate_average_flights(airport_code):
     days = request.args.get('days', 7, type=int) #default=7
