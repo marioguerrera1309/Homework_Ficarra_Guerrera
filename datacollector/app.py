@@ -410,14 +410,12 @@ def fetch_flights_from_api(url, headers):
 def data_collection_job():
     with app.app_context():
         verify_users()
-        print("QUI SIAMO ENTRATI. INIZIO DATA COLLECTION JOB")
         NOW_UTC = datetime.utcnow()
         BEGIN_DATETIME = NOW_UTC - timedelta(hours=8)
         END_DATETIME = NOW_UTC
         begin_ts = calendar.timegm(BEGIN_DATETIME.timetuple())
         end_ts = calendar.timegm(END_DATETIME.timetuple())
         interests = db.session.query(Interest.airport_code).distinct().all()
-        print(f"Stampa grande qua ci sta entrando")
         for (airport_icao,) in interests:
             flights_collected = 0
             try:
