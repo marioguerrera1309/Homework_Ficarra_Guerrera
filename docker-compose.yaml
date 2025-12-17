@@ -65,9 +65,11 @@ services:
       dockerfile: Dockerfile
     container_name: apigateway
     ports:
-      - "80:80" #porta esterna
+      - "443:443" #porta esterna
     volumes:
       - ./nginx/configs/routing.conf:/etc/nginx/conf.d/routing.conf
+      - ./nginx/SSL_certificate/nginx-selfsigned.crt:/etc/nginx/ssl/nginx.selfsigned.crt
+      - ./nginx/SSL_certificate/nginx-selfsigned.key:/etc/nginx/ssl/nginx.selfsigned.key
     depends_on:
       usermanager:
         condition: service_started
