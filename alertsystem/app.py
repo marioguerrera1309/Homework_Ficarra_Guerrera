@@ -1,4 +1,4 @@
-from confluent_kafka import Consumer, Producer, KafkaException
+from confluent_kafka import Consumer, Producer, KafkaException, KafkaError
 import json
 import os
 from collections import deque
