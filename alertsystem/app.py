@@ -63,7 +63,7 @@ try:
         if msg is None:
             continue
         if msg.error():
-            if msg.error().code() == KafkaException._PARTITION_EOF:
+            if msg.error().code() == KafkaError._PARTITION_EOF:
                 print(f"End of partition {msg.partition()}")
             else:
                 print(f"Consumer error: {msg.error()}")
