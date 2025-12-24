@@ -1,4 +1,5 @@
 Homework_2_DSBD_Ficarra_Guerrera
+
 Per effettuare un test del funzionamento dell’applicazione, è opportuno creare, all’interno
 della repository principale, un file .env in cui inserire le credenziali:
 
