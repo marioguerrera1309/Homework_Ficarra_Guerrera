@@ -7,6 +7,8 @@ This guide deploys the project to a local Kubernetes cluster using kind.
 - kind v0.23+ and kubectl v1.30+
 - Project images buildable locally
 
+## 0) Install kind
+choco install kind
 ## 1) Create the kind cluster
 ```powershell
 kind create cluster --config k8s/kind-cluster.yaml --name homework
