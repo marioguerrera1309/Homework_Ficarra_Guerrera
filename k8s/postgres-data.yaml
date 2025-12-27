@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-db
+  namespace: homework
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-db
+  template:
+    metadata:
+      labels:
+        app: data-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_USER
+          value: "mario"
+        - name: POSTGRES_PASSWORD
+          value: "guerrera"
+        - name: POSTGRES_DB
+          value: "data_db"
+        ports:
+        - containerPort: 5432
+        readinessProbe:
+          exec:
+            command: ["sh","-c","pg_isready -U mario -d data_db"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: init-sql
+          mountPath: /docker-entrypoint-initdb.d/init.sql
+          subPath: init.sql
+        - name: data-db-data
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: init-sql
+        configMap:
+          name: data-db-init
+      - name: data-db-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-db
+  namespace: homework
+spec:
+  type: ClusterIP
+  selector:
+    app: data-db
+  ports:
+  - name: pg
+    port: 5432
+    targetPort: 5432

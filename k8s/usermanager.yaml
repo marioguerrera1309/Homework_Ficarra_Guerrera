@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-manager
+  namespace: homework
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-manager
+  template:
+    metadata:
+      labels:
+        app: user-manager
+    spec:
+      containers:
+      - name: usermanager
+        image: usermanager:local
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: DATABASE_URL
+          value: postgresql://mario:guerrera@user-db:5432/user_db
+        - name: GRPC_PORT
+          value: "50051"
+        - name: PERIODO
+          value: "10"
+        ports:
+        - containerPort: 50051
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-manager
+  namespace: homework
+spec:
+  type: ClusterIP
+  selector:
+    app: user-manager
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: 50051

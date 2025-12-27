@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apigateway
+  namespace: homework
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: apigateway
+  template:
+    metadata:
+      labels:
+        app: apigateway
+    spec:
+      containers:
+      - name: nginx
+        image: nginx-gateway:local
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 443
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d/routing.conf
+          subPath: routing.conf
+        - name: tls-secret
+          mountPath: /etc/nginx/ssl/nginx.selfsigned.crt
+          subPath: tls.crt
+        - name: tls-secret
+          mountPath: /etc/nginx/ssl/nginx.selfsigned.key
+          subPath: tls.key
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: nginx-config
+      - name: tls-secret
+        secret:
+          secretName: tls-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apigateway
+  namespace: homework
+spec:
+  type: NodePort
+  selector:
+    app: apigateway
+  ports:
+  - name: https
+    port: 443
+    targetPort: 443
+    nodePort: 30443
