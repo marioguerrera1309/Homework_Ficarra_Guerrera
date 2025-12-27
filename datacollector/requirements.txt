@@ -7,3 +7,4 @@ requests
 sqlalchemy
 schedule
 confluent-kafka
+prometheus_client

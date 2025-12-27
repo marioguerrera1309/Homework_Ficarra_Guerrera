@@ -45,7 +45,7 @@ services:
       USERNAME_API: ${username}
       PASSWORD_API: ${password}
       GRPC_PORT: 50051
-      PERIODO: 100
+      PERIODO: 20
       KAFKA_BROKER_LIST: kafkabasic_kafka_1:9092
       TOPIC_INPUT_NAME: to-alert-system
   usermanager:
@@ -74,6 +74,8 @@ services:
       usermanager:
         condition: service_started
       datacollector:
+        condition: service_started
+      prometheus:
         condition: service_started
   kafka:
     image: confluentinc/cp-kafka:7.4.0
@@ -122,5 +124,20 @@ services:
       SMTP_PORT: ${SMTP_PORT}
       SENDER_EMAIL: ${SENDER_EMAIL}
       SENDER_PASSWORD: ${SENDER_PASSWORD}
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus_container
+    volumes:
+      - ./prometheus/:/etc/prometheus/
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.external-url=https://apigate.com/prometheus/'
+    ports:
+      - "9090:9090"
+    restart: always
+
 volumes:
   kafka-data:
+  prometheus_data: {}

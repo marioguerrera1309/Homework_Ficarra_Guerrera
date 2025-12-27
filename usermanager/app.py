@@ -13,6 +13,13 @@ import time
 import json
 import hashlib
 from sqlalchemy.exc import IntegrityError
+from prometheus_client import start_http_server, Counter, Gauge
+
+L_LABELS = ['service', 'node_name']
+MY_SERVICE = "usermanager"
+MY_NODE = os.environ.get('NODE_NAME', 'docker-desktop')
+USER_OPS_COUNTER = Counter('usermanager_ops_total', 'Conteggio totale operazioni utente', L_LABELS)
+DB_LATENCY_GAUGE = Gauge('usermanager_db_latency_seconds', 'Tempo ultima operazione DB', L_LABELS)
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -75,6 +82,8 @@ def users():
 @app.route('/add_user', methods=['POST'])
 def add_user():
     #idempotency_key = request.headers.get('X-Idempotency-Key')
+    USER_OPS_COUNTER.labels(service=MY_SERVICE, node_name=MY_NODE).inc()
+    start_time = time.time()
     email = request.form.get('email')
     name = request.form.get('name')
     surname = request.form.get('surname')
@@ -97,6 +106,8 @@ def add_user():
         )
         db.session.add(new_key)
         db.session.commit()
+        latency = time.time() - start_time
+        DB_LATENCY_GAUGE.labels(service=MY_SERVICE, node_name=MY_NODE).set(latency)
         return jsonify(success_message), success_status
     except IntegrityError:
         db.session.rollback()
@@ -109,6 +120,7 @@ def add_user():
         return jsonify({"error": "Internal server error."}), 500
 @app.route('/delete_user', methods=['POST'])
 def delete_user():
+    USER_OPS_COUNTER.labels(service=MY_SERVICE, node_name=MY_NODE).inc()
     user = User.query.filter_by(email=request.form['email']).first()
     if user is None:
         return jsonify({"message": "User not found."}), 404
@@ -157,11 +169,14 @@ def run_delete_idempotency_key():
         schedule.run_pending()
         time.sleep(1)
 if __name__ == '__main__':
-    grpc_thread = threading.Thread(target=serve, daemon=True)
-    grpc_thread.start()
-    hard_delete_thread = threading.Thread(target=run_hard_delete_user, daemon=True)
-    hard_delete_thread.start()
-    delete_idempotency_key_thread = threading.Thread(target=run_delete_idempotency_key, daemon=True)
-    delete_idempotency_key_thread.start()
-    #print("mainDEBUG: GRPC_PORT =", os.environ.get("GRPC_PORT"))
+    if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+        start_http_server(8000)
+        print("Prometheus metrics available on port 8000")
+        grpc_thread = threading.Thread(target=serve, daemon=True)
+        grpc_thread.start()
+        hard_delete_thread = threading.Thread(target=run_hard_delete_user, daemon=True)
+        hard_delete_thread.start()
+        delete_idempotency_key_thread = threading.Thread(target=run_delete_idempotency_key, daemon=True)
+        delete_idempotency_key_thread.start()
+        #print("mainDEBUG: GRPC_PORT =", os.environ.get("GRPC_PORT"))
     app.run(host='0.0.0.0', port=5000, debug=False)

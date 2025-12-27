@@ -16,6 +16,13 @@ from sqlalchemy import select, func, cast, BigInteger
 from sqlalchemy.sql.expression import text
 from circuit_breaker import CircuitBreaker, CircuitBreakerOpenException
 from confluent_kafka import Producer
+from prometheus_client import start_http_server, Counter, Gauge
+
+L_LABELS = ['service', 'node_name']
+MY_SERVICE = "datacollector"
+MY_NODE = os.environ.get('NODE_NAME', 'docker-desktop')
+FLIGHTS_COLLECTED_COUNTER = Counter('datacollector_flights_total', 'Voli totali raccolti', L_LABELS)
+GRPC_LATENCY_GAUGE = Gauge('datacollector_grpc_latency_seconds', 'Latenza chiamata gRPC CheckUserStatus', L_LABELS)
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -63,12 +70,14 @@ API_BASE_URL = "https://opensky-network.org/api"
 TOKEN=None
 SERVER_ADDRESS='usermanager:'+os.environ.get('GRPC_PORT')
 def CheckUserStatus(email):
+    start_time = time.time()
     with grpc.insecure_channel(SERVER_ADDRESS) as channel:
         stub=service_pb2_grpc.UserManagerServiceStub(channel)
         print(f"Client: invio la richiesta con email: {email}", file=os.sys.stderr)
         response=stub.CheckUserStatus(service_pb2.UserVerification(email=email))
         status=response.status
         print(f"Ricevuta risposta: {status}", file=os.sys.stderr)
+        GRPC_LATENCY_GAUGE.labels(service=MY_SERVICE, node_name=MY_NODE).set(time.time() - start_time)
         return status
 def get_access_token_logic():
     data = {
@@ -457,6 +466,7 @@ def data_collection_job():
                     for t in thresholds_result
                 ]
                 if flights_collected > 0 and user_thresholds:
+                    FLIGHTS_COLLECTED_COUNTER.labels(service=MY_SERVICE, node_name=MY_NODE).inc(flights_collected)
                     publish_flight_count(airport_icao, flights_collected, user_thresholds)
             except CircuitBreakerOpenException:
                 print(f"[{airport_icao}] Circuit Breaker APERTO. Saltata la raccolta per questo aeroporto.", file=os.sys.stderr)
@@ -473,8 +483,11 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(1)
 if __name__ == '__main__':
+
     TOKEN = get_access_token()
     if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+        start_http_server(8000)
+        print("Prometheus metrics available on port 8000")
         print("Avvio del modulo Scheduler/Job...", file=os.sys.stderr)
         if TOKEN:
             print("Esecuzione del primo job di raccolta dati...", file=os.sys.stderr)
