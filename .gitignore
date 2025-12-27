@@ -1,3 +1,4 @@
 .env
 /nginx/SSL_certificate/nginx-selfsigned.crt
 /nginx/SSL_certificate/nginx-selfsigned.key
+kind-windows-amd64.exe
