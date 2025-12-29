@@ -12,6 +12,9 @@ spec:
     metadata:
       labels:
         app: alertnotifiersystem
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
     spec:
       containers:
       - name: alertnotifiersystem
@@ -44,3 +47,10 @@ spec:
             secretKeyRef:
               name: smtp-secret
               key: SENDER_PASSWORD
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        ports:
+        - name: metrics
+          containerPort: 8000

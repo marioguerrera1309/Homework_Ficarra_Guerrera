@@ -24,7 +24,7 @@ docker build -t usermanager:local .\usermanager
 docker build -t datacollector:local .\datacollector
 docker build -t alertsystem:local .\alertsystem
 docker build -t alertnotifiersystem:local .\alertnotifiersystem
-
+docker pull prom/prometheus:v2.45.0
 
 # Build the nginx gateway image
 docker build -t nginx-gateway:local .\nginx
@@ -37,6 +37,7 @@ kind load docker-image datacollector:local --name homework
 kind load docker-image alertsystem:local --name homework
 kind load docker-image alertnotifiersystem:local --name homework
 kind load docker-image nginx-gateway:local --name homework
+kind load docker-image prom/prometheus:v2.45.0 --name homework
 ```
 
 ## 4) Create namespace and config prerequisites
@@ -81,6 +82,7 @@ kubectl apply -n homework -f k8s/datacollector.yaml
 kubectl apply -n homework -f k8s/alertsystem.yaml
 kubectl apply -n homework -f k8s/alertnotifiersystem.yaml
 kubectl apply -n homework -f k8s/nginx.yaml
+kubectl apply -n homework -f k8s/prometheus.yaml
 kubectl get pods -n homework
 ```
 

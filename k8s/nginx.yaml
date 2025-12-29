@@ -12,6 +12,9 @@ spec:
     metadata:
       labels:
         app: apigateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "80"
     spec:
       containers:
       - name: nginx

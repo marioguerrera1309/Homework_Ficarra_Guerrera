@@ -12,6 +12,9 @@ spec:
     metadata:
       labels:
         app: datacollector
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
     spec:
       containers:
       - name: datacollector
@@ -21,7 +24,7 @@ spec:
         - name: DATABASE_URL
           value: postgresql://mario:guerrera@data-db:5432/data_db
         - name: GRPC_USER_MANAGER_HOST
-          value: user-manager:50051
+          value: usermanager:50051
         - name: USERNAME_API
           valueFrom:
             secretKeyRef:
@@ -40,8 +43,17 @@ spec:
           value: kafka-0.kafka-hs.homework.svc.cluster.local:9092
         - name: TOPIC_INPUT_NAME
           value: to-alert-system
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         ports:
-        - containerPort: 50051
+        - name: http
+          containerPort: 5000
+        - name: grpc
+          containerPort: 50051
+        - name: metrics
+          containerPort: 8000
 ---
 apiVersion: v1
 kind: Service
@@ -53,6 +65,12 @@ spec:
   selector:
     app: datacollector
   ports:
+  - name: http
+    port: 5000
+    targetPort: 5000
   - name: grpc
     port: 50051
     targetPort: 50051
+  - name: metrics
+    port: 8000
+    targetPort: 8000
