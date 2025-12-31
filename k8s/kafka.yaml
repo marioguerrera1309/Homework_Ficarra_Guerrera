@@ -1,3 +1,18 @@
+# 1. Service "Stabile" per i client (datacollector, ecc.)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: homework
+spec:
+  selector:
+    app: kafka
+  ports:
+    - name: broker
+      port: 9092
+      targetPort: 9092
+---
+# 2. Service "Headless" per identità interna (obbligatorio per StatefulSet)
 apiVersion: v1
 kind: Service
 metadata:
@@ -11,10 +26,11 @@ spec:
     app: kafka
   ports:
     - name: broker
-      port: 29092
+      port: 9092
     - name: controller
-      port: 29092
+      port: 9093
 ---
+# 3. Lo StatefulSet
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -31,41 +47,33 @@ spec:
       labels:
         app: kafka
     spec:
+      # --- QUESTA È LA RIGA MANCANTE CHE RISOLVE L'ERRORE ---
+      enableServiceLinks: false
+      # ------------------------------------------------------
       containers:
         - name: kafka
           image: confluentinc/cp-kafka:7.4.0
           ports:
-            - containerPort: 29092
-            - containerPort: 29092
+            - containerPort: 9092
+            - containerPort: 9093
           env:
-            # --- RUOLI E ID ---
             - name: KAFKA_NODE_ID
               value: "0"
             - name: KAFKA_PROCESS_ROLES
               value: "broker,controller"
             - name: KAFKA_CONTROLLER_LISTENER_NAMES
               value: "CONTROLLER"
-
-            # --- LISTENERS (Chi ascolta cosa) ---
-            # Il container ascolta su tutte le interfacce (0.0.0.0)
             - name: KAFKA_LISTENERS
               value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
 
-            # --- ADVERTISED (Come mi faccio chiamare) ---
-            # Qui diciamo: "Ehi client, per parlarmi usa il mio nome DNS completo"
+            # Nota: kafka-0.kafka-hs... è l'indirizzo DNS stabile
             - name: KAFKA_ADVERTISED_LISTENERS
               value: "PLAINTEXT://kafka-0.kafka-hs.homework.svc.cluster.local:9092"
 
-            # --- SICUREZZA ---
             - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
               value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-
-            # --- QUORUM (Votazioni interne) ---
-            # Il controller si connette a se stesso usando il DNS interno
             - name: KAFKA_CONTROLLER_QUORUM_VOTERS
               value: "0@kafka-0.kafka-hs.homework.svc.cluster.local:9093"
-
-            # --- ALTRO ---
             - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
               value: "1"
             - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR

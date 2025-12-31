@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-db-init
+  namespace: homework
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS users (
+        email VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        surname VARCHAR(100) NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        deleted_at TIMESTAMP DEFAULT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+        key VARCHAR(255) PRIMARY KEY,
+        status_code INTEGER,
+        response_body TEXT,
+        completion_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: data-db-init
+  namespace: homework
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS flights (
+        icao24 VARCHAR(50) PRIMARY KEY,
+        callsign VARCHAR(50),
+        est_departure_airport VARCHAR(10),
+        est_arrival_airport VARCHAR(10),
+        first_seen_utc VARCHAR(30),
+        last_seen_utc VARCHAR(30),
+        ingestion_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS interests (
+        email VARCHAR(255) NOT NULL,
+        airport_code VARCHAR(10) NOT NULL,
+        high_value INTEGER DEFAULT NULL,
+        low_value INTEGER DEFAULT NULL,
+        PRIMARY KEY (email, airport_code)
+    );

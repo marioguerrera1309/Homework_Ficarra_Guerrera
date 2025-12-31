@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-db
+  namespace: homework
+spec:
+  selector:
+    app: user-db
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-db
+  namespace: homework
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-db
+  template:
+    metadata:
+      labels:
+        app: user-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "mario"
+            - name: POSTGRES_PASSWORD
+              value: "guerrera"
+            - name: POSTGRES_DB
+              value: "user_db"
+          volumeMounts:
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+            - name: pg-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: init-sql
+          configMap:
+            name: user-db-init
+            items:
+              - key: init.sql
+                path: init.sql
+        - name: pg-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-db
+  namespace: homework
+spec:
+  selector:
+    app: data-db
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-db
+  namespace: homework
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-db
+  template:
+    metadata:
+      labels:
+        app: data-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "mario"
+            - name: POSTGRES_PASSWORD
+              value: "guerrera"
+            - name: POSTGRES_DB
+              value: "data_db"
+          volumeMounts:
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+            - name: pg-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: init-sql
+          configMap:
+            name: data-db-init
+            items:
+              - key: init.sql
+                path: init.sql
+        - name: pg-data
+          emptyDir: {}

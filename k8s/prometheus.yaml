@@ -7,19 +7,24 @@ data:
   prometheus.yml: |
     global:
       scrape_interval: 15s
+
     scrape_configs:
-      - job_name: 'kubernetes-pods'
-        kubernetes_sd_configs:
-          - role: pod
-        relabel_configs:
-          - source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_scrape ]
-            action: keep
-            regex: true
-          - source_labels: [ __address__, __meta_kubernetes_pod_annotation_prometheus_io_port ]
-            action: replace
-            regex: ([^:]+)(?::\d+)?;(\d+)
-            replacement: $1:$2
-            target_label: __address__
+      - job_name: 'microservices'
+        static_configs:
+          - targets: ['usermanager:8000', 'datacollector:8000']
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: homework
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -38,31 +43,25 @@ spec:
     spec:
       containers:
         - name: prometheus
-          image: prom/prometheus:latest
+          image: prom/prometheus:v2.45.0
           args:
-            - "--config.file=/etc/prometheus/prometheus.yml"
-            - "--storage.tsdb.path=/prometheus"
-            - "--web.external-url=https://apigate.com/prometheus/" ## Allineato al tuo Nginx
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --web.external-url=https://apigate.com/prometheus/
           ports:
             - containerPort: 9090
           volumeMounts:
-            - name: config-volume
-              mountPath: /etc/prometheus
+            - name: prom-config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+            - name: prom-data
+              mountPath: /prometheus
       volumes:
-        - name: config-volume
+        - name: prom-config
           configMap:
             name: prometheus-config
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: prometheus
-  namespace: homework
-spec:
-  selector:
-    app: prometheus
-  ports:
-    - protocol: TCP
-      port: 9090
-      targetPort: 9090
-  
+            items:
+              - key: prometheus.yml
+                path: prometheus.yml
+        - name: prom-data
+          emptyDir: {}

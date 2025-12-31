@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertsystem
+  namespace: homework
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertsystem
+  template:
+    metadata:
+      labels:
+        app: alertsystem
+    spec:
+      containers:
+        - name: alertsystem
+          image: homework/alertsystem:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: KAFKA_BROKER_LIST
+              value: kafka:9092
+            - name: TOPIC_INPUT_NAME
+              value: to-alert-system
+            - name: TOPIC_OUTPUT_NAME
+              value: to-notifier
+            - name: CONSUMER_GROUP_ID
+              value: processor-group
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertnotifiersystem
+  namespace: homework
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertnotifiersystem
+  template:
+    metadata:
+      labels:
+        app: alertnotifiersystem
+    spec:
+      containers:
+        - name: alertnotifiersystem
+          image: homework/alertnotifiersystem:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: KAFKA_BROKER_LIST
+              value: kafka:9092
+            - name: TOPIC_INPUT_NAME
+              value: to-notifier
+            - name: CONSUMER_GROUP_ID
+              value: final-consumer-group
+            - name: SMTP_SERVER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: SMTP_SERVER
+            - name: SMTP_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: SMTP_PORT
+            - name: SENDER_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: SENDER_EMAIL
+            - name: SENDER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: SENDER_PASSWORD

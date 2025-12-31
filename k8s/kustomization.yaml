@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: homework
+resources:
+  - namespace.yaml
+  - configmap-postgres.yaml
+  - postgres.yaml
+  - kafka.yaml
+  - app-services.yaml
+  - alerts.yaml
+  - prometheus.yaml
+  - nginx.yaml
+# Secrets are provided separately to avoid committing credentials

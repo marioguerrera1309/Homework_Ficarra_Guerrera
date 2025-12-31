@@ -17,7 +17,7 @@ from sqlalchemy.sql.expression import text
 from circuit_breaker import CircuitBreaker, CircuitBreakerOpenException
 from confluent_kafka import Producer
 from prometheus_client import start_http_server, Counter, Gauge
-
+import prometheus_client
 L_LABELS = ['service', 'node_name']
 MY_SERVICE = "datacollector"
 MY_NODE = os.environ.get('NODE_NAME', 'docker-desktop')
@@ -483,10 +483,9 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(1)
 if __name__ == '__main__':
-
     TOKEN = get_access_token()
     if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-        start_http_server(8000)
+        prometheus_client.start_http_server(8000)
         print("Prometheus metrics available on port 8000")
         print("Avvio del modulo Scheduler/Job...", file=os.sys.stderr)
         if TOKEN:

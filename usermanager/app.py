@@ -14,7 +14,7 @@ import json
 import hashlib
 from sqlalchemy.exc import IntegrityError
 from prometheus_client import start_http_server, Counter, Gauge
-
+import prometheus_client
 L_LABELS = ['service', 'node_name']
 MY_SERVICE = "usermanager"
 MY_NODE = os.environ.get('NODE_NAME', 'docker-desktop')
@@ -170,7 +170,7 @@ def run_delete_idempotency_key():
         time.sleep(1)
 if __name__ == '__main__':
     if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-        start_http_server(8000)
+        prometheus_client.start_http_server(8000)
         print("Prometheus metrics available on port 8000")
         grpc_thread = threading.Thread(target=serve, daemon=True)
         grpc_thread.start()
