@@ -43,12 +43,12 @@ try {
   }
 
   $secretsFile = Join-Path $repo 'k8s/secrets.yaml'
-  Exec "kubectl apply -f `"$secretsFile`""
 
   Exec "kubectl apply -k k8s"
 
   Write-Host "Deployment submitted. To watch: kubectl get pods -n homework -w" -ForegroundColor Green
   Write-Host "Gateway: https://apigate.com/ mapped to https://localhost/ via kind port 443." -ForegroundColor Green
+  Exec "kubectl apply -f `"$secretsFile`""
 }
 finally {
   Pop-Location
